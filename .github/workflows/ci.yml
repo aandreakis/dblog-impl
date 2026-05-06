@@ -1,0 +1,181 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit-tests:
+    name: Unit tests (JDK 21, ${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Validate Gradle wrapper
+        uses: gradle/actions/wrapper-validation@v4
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Run unit tests
+        run: ./gradlew test --no-daemon
+
+      - name: Upload test reports on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports-${{ matrix.os }}
+          path: build/reports/tests/test
+          retention-days: 7
+
+  integration-tests:
+    name: Integration tests (JDK 21, ubuntu-24.04)
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Validate Gradle wrapper
+        uses: gradle/actions/wrapper-validation@v4
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Run integration tests
+        run: ./gradlew integrationTest --no-daemon
+
+      - name: Upload integration reports on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-test-reports
+          path: build/reports/tests/integrationTest
+          retention-days: 7
+
+  docker-verification:
+    name: Docker verification (JDK 21, ubuntu-24.04)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Validate Gradle wrapper
+        uses: gradle/actions/wrapper-validation@v4
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Verify Docker is reachable
+        run: docker ps
+
+      - name: Run Docker-backed verification
+        run: ./gradlew integrationTestDocker e2eTestDocker compatibilityMatrix --no-daemon
+
+      - name: Upload Docker verification reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-verification-reports
+          path: build/reports
+          retention-days: 14
+
+  demo-smoke:
+    name: Demo library smoke (Python ${{ matrix.python }}, ${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-latest, macos-latest]
+        python: ['3.11']
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Import + stdlib-only smoke
+        # Exercises the cross-platform code paths in scripts/demo/lib.py that
+        # don't require Docker or the JVM: pathlib resolution, sockets, the
+        # project-name hash, and the JSON parser for the control-plane
+        # response shape. Full end-to-end demos need Docker + Testcontainers
+        # so they are not run on Windows/macOS runners here; the Linux-only
+        # Docker verification job above covers those merge-gate lanes.
+        run: |
+          python - <<'PY'
+          import sys
+          sys.path.insert(0, 'scripts/demo')
+          import lib
+
+          print('import OK')
+
+          port = lib.find_free_local_port()
+          assert 1024 < port < 65536, port
+          print(f'find_free_local_port() -> {port}')
+
+          name = lib.compose_project_name()
+          assert name.startswith('dblog-'), name
+          print(f'compose_project_name() -> {name}')
+
+          # port_is_available / port_has_listener must at least be callable
+          # (without Docker, they just report a non-bound port).
+          assert isinstance(lib.port_is_available(port), bool)
+          assert isinstance(lib.port_has_listener(port), bool)
+
+          # Real API response shape from ControlPlaneHttpServer.java
+          nested = '{"accepted": true, "request": {"requestId": "abc-123"}}'
+          assert lib.extract_request_id(nested) == 'abc-123'
+          # Non-JSON fallback (previous bash sed behaviour)
+          assert lib.extract_request_id('"requestId":"raw-1" extra') == 'raw-1'
+          # Bogus input
+          assert lib.extract_request_id('not json at all') == ''
+
+          print('smoke OK')
+          PY

@@ -1,0 +1,16 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Read the contribution policy first
+    url: https://github.com/aandreakis/dblog-impl/blob/main/CONTRIBUTING.md
+    about: >-
+      This repository is a reference implementation published under the MIT
+      license. Feature requests, feature pull requests, roadmap asks, and
+      support requests are out of scope and may be closed without review.
+      Bug reports and small bug-fix PRs within the existing scope may be
+      accepted.
+  - name: Report a security issue privately
+    url: https://github.com/aandreakis/dblog-impl/security/advisories/new
+    about: >-
+      Use GitHub Security Advisories for any suspected vulnerability — do not
+      file a public issue. See SECURITY.md for scope and what is explicitly
+      out of scope by design.

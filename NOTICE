@@ -1,0 +1,7 @@
+This repository is an unofficial reference implementation inspired by the publicly available DBLog paper and blog post.
+
+It is not affiliated with, endorsed by, or representative of Netflix, and it is not the code used internally at Netflix.
+
+The MIT license in this repository applies to this codebase only. Nothing in this repository should be read as granting any rights under patents owned by third parties, including Netflix. Users are responsible for evaluating any patent implications of their use.
+
+Trademarks, service marks, and company names belong to their respective owners.

@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DBLog &mdash; a reference implementation of watermark-based change-data capture</title>
+<style>
+  /*
+   * Calm white — pure white background, deep navy ink, navy accents.
+   * Width: 832px (52rem at 16px base, 8-pt grid friendly).
+   */
+  :root {
+    --bg:        #ffffff;
+    --bg-soft:   #f5f7fb;
+    --paper:     #ffffff;
+    --line:      #e5e9f0;
+    --line-soft: #eef1f6;
+    --ink:       #0a1f3a;       /* deep navy — primary ink */
+    --ink-mid:   #25334b;
+    --ink-dim:   #5b6680;
+    --ink-faint: #8d97ad;
+    --navy:      #0f3565;       /* heading navy */
+    --navy-deep: #082248;
+    --accent:    #1257aa;       /* link / interactive navy */
+    --code-bg:   #f1f4f9;
+    --radius:    8px;
+    --max:       832px;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink-mid);
+    font: 16px/1.7 -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", system-ui, Helvetica, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  b, strong { color: var(--ink); }
+  em { font-style: italic; }
+
+  .wrap { max-width: var(--max); margin: 0 auto; padding: 32px 24px 96px; }
+
+  /* ---------- Hero ---------- */
+  header.hero {
+    text-align: center;
+    padding: 48px 24px 36px;
+    border-bottom: 1px solid var(--line);
+    background: var(--bg);
+  }
+  header.hero h1 {
+    font-size: clamp(36px, 4.8vw, 48px);
+    letter-spacing: -0.022em;
+    margin: 0 0 12px;
+    color: var(--navy);
+    font-weight: 800;
+    line-height: 1;
+  }
+  header.hero .tag {
+    color: var(--ink-dim);
+    font-size: 17px;
+    margin: 0 auto;
+    max-width: 640px;
+    line-height: 1.55;
+    text-wrap: balance;
+  }
+
+  /* ---------- Headings ---------- */
+  h2 {
+    font-size: 22px;
+    color: var(--navy);
+    margin: 52px 0 14px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--line);
+    font-weight: 800;
+    letter-spacing: -0.012em;
+  }
+  h2:first-of-type { margin-top: 8px; }
+  h3 {
+    font-size: 15.5px;
+    color: var(--ink);
+    margin: 28px 0 6px;
+    font-weight: 700;
+  }
+  p { margin: 0 0 14px; }
+  ul, ol { padding-left: 22px; margin: 0 0 14px; }
+  ul li, ol li { margin: 6px 0; }
+
+  /* ---------- Inline ---------- */
+  code {
+    font-family: "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
+    background: var(--code-bg);
+    border: 1px solid var(--line);
+    padding: 1px 5px;
+    border-radius: 4px;
+    color: var(--navy);
+    font-size: 12.5px;
+  }
+
+  /* ---------- Watermark inline chips ---------- */
+  .wm-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 1px 8px;
+    border-radius: 4px;
+    border: 1px solid var(--line);
+    background: var(--bg-soft);
+    color: var(--ink-mid);
+    font-family: "JetBrains Mono", "SF Mono", Menlo, monospace;
+    font-size: 12px;
+    letter-spacing: 0.04em;
+  }
+  .wm-chip .glyph { color: var(--navy); }
+
+  /* ---------- Tiles ---------- */
+  .tiles {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    margin: 18px 0 0;
+  }
+  .tile {
+    padding: 18px 18px 16px;
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    transition: border-color 140ms, transform 140ms;
+  }
+  .tile:hover { border-color: var(--ink-faint); transform: translateY(-1px); }
+  .tile h3 { margin: 0 0 5px; font-size: 14.5px; color: var(--navy); font-weight: 700; }
+  .tile p { margin: 0; color: var(--ink-dim); font-size: 13.5px; line-height: 1.55; }
+
+  /* ---------- Note callout ---------- */
+  .note {
+    background: var(--bg-soft);
+    border-left: 3px solid var(--navy);
+    padding: 14px 18px;
+    margin: 18px 0;
+    border-radius: 0 var(--radius) var(--radius) 0;
+    font-size: 14.5px;
+    color: var(--ink-mid);
+  }
+  .note b { color: var(--navy); }
+
+  /* ---------- Media / figures ---------- */
+  figure.media {
+    margin: 22px 0 0;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    overflow: hidden;
+    background: var(--paper);
+  }
+  figure.media img { display: block; width: 100%; height: auto; }
+  figure.media figcaption {
+    padding: 12px 18px;
+    border-top: 1px solid var(--line);
+    background: var(--bg-soft);
+    color: var(--ink-dim);
+    font-size: 13.5px;
+    margin: 0;
+  }
+
+  /* ---------- More info / CTA ---------- */
+  .cta-block {
+    margin-top: 56px;
+    padding: 28px 24px;
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 16px;
+  }
+  .cta-block .text { color: var(--ink-mid); font-size: 14.5px; line-height: 1.55; max-width: 540px; }
+  .cta-block .text b { color: var(--ink); }
+  .cta-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 18px;
+    background: var(--navy);
+    color: #fff;
+    font-weight: 600;
+    font-size: 14px;
+    border-radius: 6px;
+  }
+  .cta-button:hover { background: var(--navy-deep); text-decoration: none; }
+  .cta-button .arrow { transition: transform 140ms; }
+  .cta-button:hover .arrow { transform: translateX(2px); }
+
+  footer {
+    margin-top: 36px;
+    margin-left: auto;
+    margin-right: auto;
+    padding-top: 20px;
+    border-top: 1px solid var(--line);
+    color: var(--ink-faint);
+    font-size: 12.5px;
+    line-height: 1.6;
+    max-width: 680px;
+    text-align: center;
+  }
+
+  @media (max-width: 720px) {
+    header.hero { padding: 36px 18px 28px; }
+    .tiles { grid-template-columns: 1fr; }
+    .cta-block { flex-direction: column; align-items: flex-start; }
+  }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <h1>DBLog</h1>
+  <p class="tag">
+    A reference implementation of the watermark-based change-data
+    capture algorithm, based on the original DBLog paper and Netflix
+    Technology Blog post.
+  </p>
+</header>
+
+<div class="wrap">
+
+<h2>The problem</h2>
+
+<p>
+  A downstream system &mdash; a search index, a cache, a data warehouse
+  &mdash; needs to track every change in a database. To
+  feed it, you need two streams:
+</p>
+
+<ol>
+  <li>A <b>snapshot</b>: a one-time copy of every row already in the table.</li>
+  <li>A <b>change stream</b>: every <code>INSERT</code> / <code>UPDATE</code> / <code>DELETE</code>, as it happens, read from the database log.</li>
+</ol>
+
+<p>
+  In order to combine these streams, coordination is needed to ensure
+  convergence to the latest state. Typical approaches achieve
+  this by blocking writes at the application layer or with
+  table locks, pausing log-event processing, or letting change events
+  accumulate until the snapshot has completed.
+</p>
+
+<p>
+  To make things more interesting, a full-state read is usually not
+  only needed initially. It may be needed later too: to backfill a new
+  consumer, repair corrupted downstream state, reload after a restore,
+  or re-read specific primary keys.
+</p>
+
+<figure class="media">
+  <img src="ops/tap-tui/docs/img/hero.gif" alt="Hydroscope showing DBLog watermark-window reconciliation in action">
+  <figcaption>
+    DBLog in motion &mdash; live log events and bounded chunk reads
+    merging into one ordered output stream, captured by the bundled
+    visualizer (Hydroscope). How it works is below.
+  </figcaption>
+</figure>
+
+<h2>The watermark idea</h2>
+
+<p>
+  DBLog captures table state through bounded chunk selects <b>and</b>
+  consumes the change stream <em>concurrently</em>, with no source-side
+  locks, while still producing a correct, ordered output.
+</p>
+
+<p>
+  The trick is two markers written into the source database and
+  appearing in the change stream afterwards:
+</p>
+
+<p class="wm-line">
+  <span class="wm-chip"><span class="glyph">&#9660;</span> LW</span>
+  &nbsp;&mdash; the <em>low watermark</em>, written to the source <b>before</b> reading a chunk of rows.
+</p>
+<p class="wm-line">
+  <span class="wm-chip"><span class="glyph">&#9650;</span> HW</span>
+  &nbsp;&mdash; the <em>high watermark</em>, written to the source <b>after</b> reading the chunk.
+</p>
+
+<p>
+  Between LW and HW, DBLog keeps consuming live log events normally. It
+  also reads a bounded chunk of rows from the source &mdash; say primary
+  keys 1&ndash;100 &mdash; and buffers them. When HW comes back from the
+  log, DBLog has a clean picture of <b>every change that happened to the
+  table while the chunk was being read</b>.
+</p>
+
+<p>
+  The reconciliation rule is one sentence: <b>if a buffered chunk row
+  shares a primary key with any in-window log event, drop the chunk
+  row.</b> The log version is newer, so the buffered copy is stale. The
+  surviving chunk rows are emitted on HW, and the reader's durable
+  position advances.
+</p>
+
+<div class="note">
+  <b>Short version:</b> chunk selected rows are provisional. In-window log
+  events are fresher. HW closes the window &mdash; only then are the
+  surviving chunk rows released and the source checkpoint allowed to
+  move forward.
+</div>
+
+<h2>DBLog in one minute</h2>
+
+<p>The cycle for one chunk, start to finish:</p>
+
+<ol>
+  <li><b>Keep streaming.</b> Consume change stream events.</li>
+  <li><b>Write LW.</b> A low-watermark marker is written to the source DB &mdash; the window has begun once DBLog sees it in the change stream.</li>
+  <li><b>Read a chunk.</b> A bounded primary-key range is read from the source and buffered (not yet emitted).</li>
+  <li><b>Write HW.</b> A high-watermark marker is written to the source DB &mdash; the window closes once DBLog reads it back from the change stream.</li>
+  <li><b>Let in-window events win.</b> Any log event between LW and HW touching a buffered PK drops the buffered row.</li>
+  <li><b>Emit the survivors.</b> The remaining chunk rows go to the sink, then durable progress advances past HW.</li>
+</ol>
+
+<figure class="media">
+  <img src="docs/img/dblog-one-minute.png" alt="Diagram of low and high watermark reconciliation">
+  <figcaption>
+    A worked example: the chunk selects pk=41, pk=42, pk=43. Inside the
+    LW&ndash;HW window an <code>UPDATE</code> for pk=42 arrives from the
+    log. The chunk's pk=42 is dropped &mdash; the log copy is fresher.
+    The output: every in-window log event in order, plus the surviving
+    chunk rows (41, 43) emitted on HW.
+  </figcaption>
+</figure>
+
+<h2>What this repo gives you</h2>
+
+<p>
+  A small Java reference implementation, built from public DBLog
+  material &mdash; the original DBLog paper and the Netflix Technology
+  Blog post. Designed for reading and experimentation, not for production.
+</p>
+
+<div class="tiles">
+  <div class="tile">
+    <h3>Executable algorithm</h3>
+    <p>Source-neutral watermark reconciliation, dump orchestration, targeted repair, and checkpoint safety.</p>
+  </div>
+  <div class="tile">
+    <h3>Real adapters</h3>
+    <p>MySQL <code>binlog</code> and PostgreSQL <code>pgoutput</code>, with Docker-backed local demos and tests.</p>
+  </div>
+  <div class="tile">
+    <h3>Inspection paths</h3>
+    <p>NDJSON, H2 inspector, JDBC apply, no-op sinks, control-plane HTTP, and the Hydroscope tap.</p>
+  </div>
+</div>
+
+<div class="cta-block">
+  <div class="text">
+    The README has demos, the algorithm-to-paper map, the operation
+    guide, and the control plane.
+  </div>
+  <a class="cta-button" href="https://github.com/aandreakis/dblog-impl">
+    Read on GitHub <span class="arrow">&rarr;</span>
+  </a>
+</div>
+
+<footer>
+  Independent, unaffiliated reference implementation built from public
+  DBLog material (the original paper and Netflix Technology Blog post).
+  <b>Not affiliated with, sponsored by, or endorsed by Netflix, Inc.</b>
+  Not Netflix's production DBLog and not intended for production CDC
+  use. All trademarks are the property of their respective owners.
+</footer>
+
+</div>
+
+</body>
+</html>

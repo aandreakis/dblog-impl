@@ -1,0 +1,25 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/aandreakis/dblog-impl/blob/main/docs/schema/events/sink-event.schema.json",
+  "title": "SinkEvent",
+  "description": "One event appended to a sink delegate, post reconciliation. Emitted once per sink per event.",
+  "type": "object",
+  "properties": {
+    "v":         { "description": "Tap schema version; always 1.", "type": "integer", "minimum": 1 },
+    "seq":       { "description": "Monotonic per-run sequence number.", "type": "integer", "minimum": 0 },
+    "ts":        { "description": "ISO-8601 UTC timestamp with microsecond resolution.", "type": "string", "format": "date-time" },
+    "run_id":    { "description": "DBLog runtime run identifier.", "type": "string", "minLength": 1 },
+    "source_id": { "description": "Configured dblog.source.id.", "type": "string", "minLength": 1 },
+    "kind":      { "type": "string", "enum": ["sink.event"] },
+    "lsn":       { "description": "Source LSN for LOG events; HIGH watermark's LSN for SELECT refresh rows.", "type": "string" },
+    "op":        { "type": "string", "enum": ["INSERT", "UPDATE", "DELETE"] },
+    "table":     { "type": "string" },
+    "pk":        { "type": "string" },
+    "origin":    { "type": "string", "enum": ["LOG", "SELECT"] },
+    "tx_id":     { "description": "Present on origin=LOG when available.", "type": "string" },
+    "dump_id":   { "description": "Required on origin=SELECT.", "type": "string" },
+    "chunk_id":  { "description": "Tap-assigned chunk id when the event is part of an active window.", "type": "integer", "minimum": 0 },
+    "sink_name": { "description": "Which delegate produced this event: ndjson | jdbc | typed_h2 | noop.", "type": "string" }
+  },
+  "required": ["v", "ts", "run_id", "source_id", "kind", "lsn", "op", "table", "pk", "origin", "sink_name"]
+}

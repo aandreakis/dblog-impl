@@ -1,0 +1,38 @@
+[package]
+name = "hydroscope"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.80"
+publish = false
+
+[dependencies]
+ratatui = "0.29"
+crossterm = "0.28"
+ureq = "2.10"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4", default-features = false, features = ["clock", "serde", "std"] }
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+
+[dev-dependencies]
+serde_json = "1"
+# Snapshot tests for the rendered TUI frame. We store a plain-text
+# rasterisation of the `TestBackend` buffer so style changes don't
+# churn the snapshots — only layout / content drift triggers a review.
+insta = "1.40"
+# Used by the `#[ignore]`d generate_anatomy_screenshots test in
+# src/bin/hydroscope.rs to rasterise a `Buffer` slice to PNG. Loads
+# /System/Library/Fonts/SFNSMono.ttf at runtime — macOS-only, opt-in,
+# no production dependency added.
+image = { version = "0.25", default-features = false, features = ["png"] }
+fontdue = "0.9"
+
+[profile.release]
+opt-level = 1
+codegen-units = 16
+lto = false
+
+[[bin]]
+name = "hydroscope"
+path = "src/bin/hydroscope.rs"

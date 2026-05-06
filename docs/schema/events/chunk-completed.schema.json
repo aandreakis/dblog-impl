@@ -1,0 +1,25 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/aandreakis/dblog-impl/blob/main/docs/schema/events/chunk-completed.schema.json",
+  "title": "ChunkCompleted",
+  "description": "HIGH watermark observed, refresh rows emitted, chunk acknowledged.",
+  "type": "object",
+  "properties": {
+    "v":           { "description": "Tap schema version; always 1.", "type": "integer", "minimum": 1 },
+    "seq":         { "description": "Monotonic per-run sequence number.", "type": "integer", "minimum": 0 },
+    "ts":          { "description": "ISO-8601 UTC timestamp with microsecond resolution.", "type": "string", "format": "date-time" },
+    "run_id":      { "description": "DBLog runtime run identifier.", "type": "string", "minLength": 1 },
+    "source_id":   { "description": "Configured dblog.source.id.", "type": "string", "minLength": 1 },
+    "kind":        { "type": "string", "enum": ["chunk.completed"] },
+    "chunk_id":    { "type": "integer", "minimum": 0 },
+    "request_id":  { "type": "string" },
+    "table":       { "type": "string" },
+    "emitted":     { "description": "Refresh SELECT rows released on HIGH watermark.", "type": "integer", "minimum": 0 },
+    "excluded":    { "description": "Rows dropped due to in-window collisions.", "type": "integer", "minimum": 0 },
+    "last_pk":     { "description": "Chunk's lastPrimaryKey. Absent when the chunk has no last-primary-key tuple.", "type": "string" },
+    "lsn":         { "description": "HIGH watermark's LSN — the refresh rows share it.", "type": "string" },
+    "duration_ms": { "description": "Wall time from watermark.written LOW to this event.", "type": "integer", "minimum": 0 },
+    "final_chunk": { "type": "boolean" }
+  },
+  "required": ["v", "ts", "run_id", "source_id", "kind", "chunk_id", "request_id", "table", "emitted", "excluded", "lsn", "duration_ms", "final_chunk"]
+}

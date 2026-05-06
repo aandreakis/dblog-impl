@@ -1,0 +1,20 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/aandreakis/dblog-impl/blob/main/docs/schema/events/stream-standby.schema.json",
+  "title": "StreamStandby",
+  "description": "The producer has been blocked on a full queue for at least dblog.tap.standby-threshold-ms. Emitted out of band; seq is null.",
+  "type": "object",
+  "properties": {
+    "v":              { "description": "Tap schema version; always 1.", "type": "integer", "minimum": 1 },
+    "seq":            { "description": "Null on stream.standby — the event is emitted out of band.", "type": "null" },
+    "ts":             { "description": "ISO-8601 UTC timestamp with microsecond resolution.", "type": "string", "format": "date-time" },
+    "run_id":         { "description": "DBLog runtime run identifier.", "type": "string", "minLength": 1 },
+    "source_id":      { "description": "Configured dblog.source.id.", "type": "string", "minLength": 1 },
+    "kind":           { "type": "string", "enum": ["stream.standby"] },
+    "queue_full_ms":  { "type": "integer", "minimum": 0 },
+    "queue_capacity": { "type": "integer", "minimum": 1 },
+    "reason":         { "type": "string", "enum": ["queue_full"] },
+    "message":        { "type": "string" }
+  },
+  "required": ["v", "ts", "run_id", "source_id", "kind", "queue_full_ms", "queue_capacity", "reason", "message"]
+}

@@ -1,0 +1,45 @@
+---
+source: src/bin/hydroscope.rs
+assertion_line: 1693
+expression: text
+---
+ DBLOG · HYDROSCOPE   · run 3f290e82…e0c7d312 · source my_mysql_source
+ ● connected · demo://chunk-42-long   request 17 · TABLE production_analytics.customer_order_line_items · ACTIVE   pace full
+╭ SOURCE EVENTS  ·  tap stream, seq-ordered — cdc + watermark + chunk ────────────────────────────────────────────╮╭ RECONCILER  ·  live chunk state ──────────╮
+│  seq  LSN                op   table / pk                            kind         note                           ││  chunk 42                                 │
+│  3    —                  LW                                         wm-written   chunk 42                       ││  table                                    │
+│  4    —                  SEL  production_analytics.customer_order_… chunk-sel    chunk 42 · pk [{tenant_id=170… ││    production_analytics.                  │
+│  5    —                  HW                                         wm-written   chunk 42                       ││    customer_order_line_items              │
+│  6    binlog.000042:1024 LW                                         wm-received  chunk 42                       ││  pk                                       │
+│  7    binlog.000042:1048 INS  customer_order_li… / {tenant_id=1700… cdc                                         ││      [{tenant_id=17001234,order_id=0090…  │
+│  9    binlog.000042:1152 UPD  customer_order_li… / {tenant_id=1700… cdc          collision in chunk 42          ││        …                                  │
+│  12   binlog.000042:1208 UPD  customer_order_li… / {tenant_id=1700… cdc          collision in chunk 42          ││      {tenant_id=17001234,order_id=0090…]  │
+│  15   binlog.000042:1332 UPD  enterprise_custom… / {tenant_id=1700… cdc                                         ││                                           │
+│  17   binlog.000042:1416 INS  customer_order_li… / {tenant_id=1700… cdc                                         ││  ▼ Low Watermark                          │
+│  19   binlog.000042:1420 UPD  customer_order_li… / {tenant_id=1700… cdc                                         ││     lsn binlog.000042:1024                │
+│  21   binlog.000042:1524 UPD  enterprise_custom… / {tenant_id=1700… cdc                                         ││     latency 10 ms                         │
+│  23   binlog.000042:1728 UPD  customer_order_li… / {tenant_id=1700… cdc                                         ││                                           │
+│  25   binlog.000042:1920 HW                                         wm-received  chunk 42                       ││  chunk buffer (40 rows)                   │
+│                                                                                                                 ││    [{tenant_id=17001234,order_id=009000…  │
+│                                                                                                                 ││      …                                    │
+│                                                                                                                 ││    {tenant_id=17001234,order_id=009000…]  │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯│    excluded (2):                          │
+╭ SINK STREAM  ·  post-reconciliation · what downstream consumers see ────────────────────────────────────────────╮│      ✗ {tenant_id=17001234,order_id=00…   │
+│  seq  LSN                op   table / pk                              origin   badge                            ││      ✗ {tenant_id=17001234,order_id=00…   │
+│  8    binlog.000042:1048 INS  customer_order_lin… / {tenant_id=17001… LOG      chunk 42 · IN-WINDOW             ││                                           │
+│  11   binlog.000042:1152 UPD  customer_order_lin… / {tenant_id=17001… LOG      chunk 42 · LOG WON               ││  in-window cdc                            │
+│  14   binlog.000042:1208 UPD  customer_order_lin… / {tenant_id=17001… LOG      chunk 42 · LOG WON               ││   ✗ UPD pk={tenant_id=17001234,order_id=… │
+│  16   binlog.000042:1332 UPD  enterprise_custome… / {tenant_id=17001… LOG      chunk 42 · IN-WINDOW             ││   ✗ UPD pk={tenant_id=17001234,order_id=… │
+│  18   binlog.000042:1416 INS  customer_order_lin… / {tenant_id=17001… LOG      chunk 42 · IN-WINDOW             ││   · 6 passthrough                         │
+│  20   binlog.000042:1420 UPD  customer_order_lin… / {tenant_id=17001… LOG      chunk 42 · IN-WINDOW             ││                                           │
+│  22   binlog.000042:1524 UPD  enterprise_custome… / {tenant_id=17001… LOG      chunk 42 · IN-WINDOW             ││  ▲ High Watermark                         │
+│  24   binlog.000042:1728 UPD  customer_order_lin… / {tenant_id=17001… LOG      chunk 42 · IN-WINDOW             ││     lsn binlog.000042:1920                │
+│  26   binlog.000042:1920 UPD  customer_order_lin… / {tenant_id=17001… SELECT   chunk 42                         ││     latency 102 ms                        │
+│  27   binlog.000042:1920 UPD  customer_order_lin… / {tenant_id=17001… SELECT   chunk 42                         ││                                           │
+│  28   binlog.000042:1920 UPD  customer_order_lin… / {tenant_id=17001… SELECT   chunk 42                         ││  replaced-by-cdc 2 rows                   │
+│  29   binlog.000042:1920 UPD  customer_order_lin… / {tenant_id=17001… SELECT   chunk 42                         ││  emit-ready 38 rows                       │
+│  30   binlog.000042:1920 UPD  customer_order_lin… / {tenant_id=17001… SELECT   chunk 42                         ││                                           │
+│  31   binlog.000042:1920 UPD  customer_order_lin… / {tenant_id=17001… SELECT   chunk 42                         ││                                           │
+│  32   binlog.000042:1920 UPD  customer_order_lin… / {tenant_id=17001… SELECT   chunk 42                         ││                                           │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯╰───────────────────────────────────────────╯
+ q  quit    space  step / advance  s  toggle step  n/m  slower / faster  f  full speed

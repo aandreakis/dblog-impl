@@ -1,0 +1,20 @@
+.gradle/
+build/
+out/
+.idea/
+.vscode/
+.claude/
+*.class
+*.log
+*.tmp
+.DS_Store
+dist/
+target/
+__pycache__/
+*.pyc
+preview/
+
+# vhs tape build artifacts (regenerate locally via `vhs hero.tape`)
+ops/tap-tui/docs/img/*.mp4
+ops/tap-tui/docs/img/*.webm
+ops/tap-tui/docs/img/.*.gif

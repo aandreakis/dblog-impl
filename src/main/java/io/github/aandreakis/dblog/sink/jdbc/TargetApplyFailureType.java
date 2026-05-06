@@ -1,0 +1,13 @@
+package io.github.aandreakis.dblog.sink.jdbc;
+
+/** Structured categories for JDBC target-apply failures. */
+public enum TargetApplyFailureType {
+  TARGET_PREFLIGHT_FAILED,
+  TARGET_TABLE_MISSING,
+  TARGET_PRIMARY_KEY_MISMATCH,
+  TARGET_COLUMN_MISSING,
+  TARGET_COLUMN_TYPE_INCOMPATIBLE,
+  TARGET_VALUE_COERCION_FAILED,
+  TARGET_METADATA_LOOKUP_FAILED,
+  TARGET_OPERATION_FAILED
+}

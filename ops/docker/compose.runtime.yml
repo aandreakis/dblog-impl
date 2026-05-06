@@ -1,0 +1,24 @@
+# Example packaged deployment overlay for the current flagship path:
+# MySQL -> DBLog -> PostgreSQL
+#
+# This file is intentionally an example deployment asset. It layers on top of
+# compose.yml, which still owns the local database fixtures.
+services:
+  dblog:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    depends_on:
+      mysql:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    command:
+      - --spring.config.additional-location=file:/etc/dblog/application.properties
+    ports:
+      # Keep the operator-facing control plane local to the host even though
+      # the container binds 0.0.0.0 internally.
+      - "127.0.0.1:8085:8085"
+    volumes:
+      - ./examples/mysql-to-postgres/application.properties:/etc/dblog/application.properties:ro
+      - ./example-state/mysql-to-postgres:/var/lib/dblog/state

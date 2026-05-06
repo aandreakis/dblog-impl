@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+  <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+  <include resource="org/springframework/boot/logging/logback/console-appender.xml"/>
+
+  <appender name="ASYNC_CONSOLE" class="ch.qos.logback.classic.AsyncAppender">
+    <queueSize>8192</queueSize>
+    <discardingThreshold>0</discardingThreshold>
+    <neverBlock>true</neverBlock>
+    <maxFlushTime>5000</maxFlushTime>
+    <appender-ref ref="CONSOLE"/>
+  </appender>
+
+  <root level="INFO">
+    <appender-ref ref="ASYNC_CONSOLE"/>
+  </root>
+</configuration>

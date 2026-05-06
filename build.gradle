@@ -1,0 +1,284 @@
+import org.gradle.api.tasks.testing.Test
+
+plugins {
+  id 'java'
+  id 'org.springframework.boot' version '4.0.5'
+}
+
+group = 'io.github.aandreakis'
+version = '0.1.0'
+
+springBoot {
+  mainClass = 'io.github.aandreakis.dblog.boot.DbLogImplApplication'
+}
+
+java {
+  toolchain {
+    languageVersion = JavaLanguageVersion.of(21)
+  }
+}
+
+repositories {
+  mavenCentral()
+}
+
+dependencyLocking {
+  lockAllConfigurations()
+}
+
+ext {
+  versions = [
+      springBoot     : '4.0.5',
+      jackson        : '2.21.2',
+      debeziumBinlog : '0.40.7',
+      h2             : '2.4.240',
+      postgresql     : '42.7.10',
+      mysqlConnector : '9.6.0',
+      testcontainers : '2.0.4',
+      mockito        : '5.20.0',
+  ]
+}
+
+sourceSets {
+  integrationTest {
+    java.srcDir file('src/integrationTest/java')
+    resources.srcDir file('src/integrationTest/resources')
+    compileClasspath += sourceSets.main.output + sourceSets.test.output
+    runtimeClasspath += output + sourceSets.main.output + sourceSets.test.output
+  }
+  e2eTest {
+    java.srcDir file('src/e2eTest/java')
+    resources.srcDir file('src/e2eTest/resources')
+    compileClasspath += sourceSets.main.output + sourceSets.test.output
+    runtimeClasspath += output + sourceSets.main.output + sourceSets.test.output
+  }
+}
+
+configurations {
+  integrationTestImplementation.extendsFrom testImplementation
+  integrationTestRuntimeOnly.extendsFrom testRuntimeOnly
+  e2eTestImplementation.extendsFrom testImplementation
+  e2eTestRuntimeOnly.extendsFrom testRuntimeOnly
+  tapSchemaCodegen
+  mockitoAgent
+}
+
+dependencies {
+  implementation "org.springframework.boot:spring-boot-starter:${versions.springBoot}"
+  implementation "org.springframework.boot:spring-boot-starter-jdbc:${versions.springBoot}"
+  implementation "org.springframework.boot:spring-boot-starter-actuator:${versions.springBoot}"
+  implementation "org.springframework.boot:spring-boot-starter-validation:${versions.springBoot}"
+  implementation "com.fasterxml.jackson.core:jackson-databind:${versions.jackson}"
+  implementation "com.fasterxml.jackson.datatype:jackson-datatype-jsr310:${versions.jackson}"
+  implementation "io.debezium:mysql-binlog-connector-java:${versions.debeziumBinlog}"
+  implementation "org.postgresql:postgresql:${versions.postgresql}"
+
+  runtimeOnly "com.h2database:h2:${versions.h2}"
+  runtimeOnly "com.mysql:mysql-connector-j:${versions.mysqlConnector}"
+
+  testImplementation "org.springframework.boot:spring-boot-starter-test:${versions.springBoot}"
+  testImplementation "org.testcontainers:testcontainers-junit-jupiter:${versions.testcontainers}"
+  testImplementation "org.testcontainers:testcontainers-postgresql:${versions.testcontainers}"
+  testImplementation "org.testcontainers:testcontainers-mysql:${versions.testcontainers}"
+  testRuntimeOnly "com.h2database:h2:${versions.h2}"
+  testRuntimeOnly "org.postgresql:postgresql:${versions.postgresql}"
+  testRuntimeOnly "com.mysql:mysql-connector-j:${versions.mysqlConnector}"
+
+  // Manual-only codegen for the tap event schema. Not attached to the compileJava chain;
+  // see the `generateTapSchemaClasses` task below. Run `./gradlew generateTapSchemaClasses`
+  // after editing docs/schema/tap-event.schema.json, then commit the regenerated sources
+  // under src/main/java/io/github/aandreakis/dblog/tap/generated/.
+  tapSchemaCodegen 'org.jsonschema2pojo:jsonschema2pojo-cli:1.2.2'
+
+  // Mockito attaches its instrumentation agent ahead of time via -javaagent (see Test JVM args
+  // below). This avoids dynamic agent self-attach, which the JVM warns about and will disallow
+  // in a future JDK. mockito-core's manifest declares Premain-Class for this purpose.
+  mockitoAgent("org.mockito:mockito-core:${versions.mockito}") { transitive = false }
+}
+
+/**
+ * Regenerates Java POJOs from docs/schema/events/*.schema.json.
+ *
+ * This task is deliberately NOT wired into compileJava. The generated sources under
+ * src/main/java/io/github/aandreakis/dblog/tap/generated/ are committed to the
+ * repo; run this task manually when the schemas change and commit the diff. There is no
+ * drift test: the guarantee is (a) POJOs are committed and (b) this codegen is deterministic
+ * (audited — re-running produces byte-identical output). Touching the schemas means running
+ * this task and committing the regenerated sources alongside.
+ */
+tasks.register('generateTapSchemaClasses', JavaExec) {
+  group = 'build setup'
+  description = 'Regenerate tap POJOs from the JSON Schema. Manual-only; commit the output.'
+  classpath = configurations.tapSchemaCodegen
+  mainClass = 'org.jsonschema2pojo.cli.Jsonschema2PojoCLI'
+  args = [
+      '--source', file('docs/schema/events').absolutePath,
+      '--target', file('src/main/java').absolutePath,
+      '--package', 'io.github.aandreakis.dblog.tap.generated',
+      '--annotation-style', 'jackson2',
+      '--generate-builders',
+      '--use-inner-class-builders',
+      '--use-title-as-classname',
+      '--generate-constructors',
+      '--constructors-required-only',
+      '--omit-generated-annotation',
+      '--long-integers',
+      '--datetime-class', 'java.time.Instant',
+      '--date-class', 'java.time.LocalDate'
+  ]
+}
+
+tasks.withType(Test).configureEach {
+  useJUnitPlatform()
+  jvmArgs "-javaagent:${configurations.mockitoAgent.asPath}"
+  // BinaryLogClient (and any other JUL user) writes INFO straight to stderr by default.
+  // This file keeps the JVM-default ConsoleHandler at INFO but silences the binlog client.
+  systemProperty 'java.util.logging.config.file',
+      file('src/test/resources/test-logging.properties').absolutePath
+  testLogging {
+    events 'failed', 'skipped'
+    exceptionFormat = 'short'
+    showExceptions = true
+    showCauses = true
+    showStackTraces = false
+  }
+}
+
+def configureAdapterBackedTest = { Test task, sourceSet ->
+  task.group = LifecycleBasePlugin.VERIFICATION_GROUP
+  task.testClassesDirs = sourceSet.output.classesDirs
+  task.classpath = sourceSet.runtimeClasspath
+  task.forkEvery = 0
+  task.systemProperty 'junit.jupiter.execution.parallel.enabled', 'false'
+}
+
+def positiveIntGradlePropertyOrNull = { String propertyName ->
+  String raw = providers.gradleProperty(propertyName).orNull
+  if (raw == null || raw.isBlank()) {
+    return null
+  }
+  try {
+    int value = Integer.parseInt(raw)
+    if (value < 1) {
+      throw new NumberFormatException('must be >= 1')
+    }
+    return value
+  } catch (NumberFormatException ignored) {
+    throw new GradleException("${propertyName} must be a positive integer, but was '${raw}'")
+  }
+}
+
+def positiveIntGradleProperty = { String propertyName, int defaultValue ->
+  Integer value = positiveIntGradlePropertyOrNull(propertyName)
+  value == null ? defaultValue : value
+}
+
+def truthyEnvironmentVariable = { String variableName ->
+  String raw = providers.environmentVariable(variableName).orNull
+  raw != null && !raw.isBlank() && !raw.equalsIgnoreCase('false') && raw != '0'
+}
+
+// Local Docker integration runs default to 3 forks for faster iteration; CI/GitHub stay at 1
+// to avoid surprising Docker resource pressure. Override with -Pdblog.dockerTestForks=N.
+def defaultDockerTestForks = {
+  truthyEnvironmentVariable('CI') || truthyEnvironmentVariable('GITHUB_ACTIONS') ? 1 : 3
+}
+
+// E2E Docker tests pair MySQL and Postgres fixtures, so their default remains 1 fork. The shared
+// Docker fork knob cascades here unless the e2e-specific knob is set.
+def e2eDockerTestForks = {
+  Integer e2eForks = positiveIntGradlePropertyOrNull('dblog.e2eDockerForks')
+  if (e2eForks != null) {
+    return e2eForks
+  }
+  Integer sharedForks = positiveIntGradlePropertyOrNull('dblog.dockerTestForks')
+  sharedForks == null ? 1 : sharedForks
+}
+
+tasks.register('integrationTest', Test) {
+  description = 'Runs adapter-backed integration tests (non-Docker lanes).'
+  configureAdapterBackedTest(delegate, sourceSets.integrationTest)
+  maxParallelForks = 1
+  useJUnitPlatform {
+    excludeTags 'integration-version-matrix'
+    excludeTags 'integration-docker'
+  }
+  shouldRunAfter tasks.named('test')
+}
+
+tasks.register('integrationTestDocker', Test) {
+  description = 'Runs Docker-backed integration tests against live MySQL and PostgreSQL adapters.'
+  configureAdapterBackedTest(delegate, sourceSets.integrationTest)
+  maxParallelForks = positiveIntGradleProperty('dblog.dockerTestForks', defaultDockerTestForks())
+  useJUnitPlatform {
+    includeTags 'integration-docker'
+  }
+  dependsOn tasks.named('dockerAvailable')
+  shouldRunAfter tasks.named('integrationTest')
+}
+
+tasks.register('e2eTest', Test) {
+  description = 'Runs end-to-end scenarios (non-Docker) covering recovery, drift, and failure modes.'
+  configureAdapterBackedTest(delegate, sourceSets.e2eTest)
+  maxParallelForks = 1
+  useJUnitPlatform {
+    excludeTags 'integration-docker'
+  }
+  shouldRunAfter tasks.named('integrationTestDocker')
+}
+
+tasks.register('e2eTestDocker', Test) {
+  description = 'Runs Docker-backed end-to-end scenarios covering live convergence and targeted repair.'
+  configureAdapterBackedTest(delegate, sourceSets.e2eTest)
+  maxParallelForks = e2eDockerTestForks()
+  useJUnitPlatform {
+    includeTags 'integration-docker'
+  }
+  dependsOn tasks.named('dockerAvailable')
+  shouldRunAfter tasks.named('e2eTest')
+}
+
+tasks.register('compatibilityMatrix', Test) {
+  description = 'Exercises the supported source-database version matrix (MySQL 8.0/8.4/9.6, PostgreSQL 14-18).'
+  configureAdapterBackedTest(delegate, sourceSets.integrationTest)
+  useJUnitPlatform {
+    includeTags 'integration-version-matrix'
+  }
+  dependsOn tasks.named('dockerAvailable')
+  // Each version test launches the production-shipped Spring Boot jar as a child JVM and
+  // drives it through the HTTP control plane. Make the bootJar path explicit and discoverable
+  // by the test JVM via a system property — no classpath inference, no test-only seams.
+  dependsOn tasks.named('bootJar')
+  doFirst {
+    systemProperty 'dblog.test.jarPath',
+        tasks.named('bootJar').get().archiveFile.get().asFile.absolutePath
+  }
+  // The MySQL and Postgres version-matrix classes are independent: separate Testcontainers,
+  // separate sink files (under build/test-output/<className>/), separate per-class harnesses.
+  // Running them in parallel JVMs cuts wall time materially because the slower vendor (Postgres,
+  // 5 versions) no longer waits for the faster one (MySQL, 3 versions) to complete first. Two
+  // forks max — going higher would not help since each class is a single @TestFactory and
+  // dynamic tests don't get distributed across forks.
+  maxParallelForks = 2
+  ['dblog.versionMatrix.mysqlImages',
+   'dblog.versionMatrix.postgresImages'].each { propertyName ->
+    String value = System.getProperty(propertyName)
+    if (value != null && !value.isBlank()) {
+      systemProperty propertyName, value
+    }
+  }
+}
+
+tasks.register('dockerAvailable') {
+  description = 'Fails fast when a task that requires Docker runs without a working Docker daemon.'
+  doLast {
+    Process process = new ProcessBuilder('docker', 'ps').start()
+    int exitCode = process.waitFor()
+    if (exitCode != 0) {
+      String stderr = process.errorStream.getText('UTF-8').trim()
+      throw new GradleException(
+          "A working Docker daemon is required. 'docker ps' failed with exit ${exitCode}"
+              + (stderr ? ": ${stderr}" : '.'))
+    }
+  }
+}

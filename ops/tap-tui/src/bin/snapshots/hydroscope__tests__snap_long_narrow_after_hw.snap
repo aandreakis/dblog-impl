@@ -1,0 +1,36 @@
+---
+source: src/bin/hydroscope.rs
+expression: text
+---
+ DBLOG · HYDROSCOPE   · run 3f290e82…e0c7d312 · source my_mysql_source
+ ● connected · demo://chunk-42-long …request 17 · TABLE production_analytics.customer_o…   pace full
+╭ SOURCE EVENTS  ·  tap stream, seq-ordered — cdc + watermark + chu… ──╮╭ RECONCILER ──────────────╮
+│  seq  LSN            op   table / pk     kind         note           ││  chunk 42                │
+│  4    —              SEL  production_an… chunk-sel    chunk 42 · pk… ││  table                   │
+│  5    —              HW                  wm-written   chunk 42       ││    production_analytics. │
+│  6    binlog.000042… LW                  wm-received  chunk 42       ││    customer_order_line_i │
+│  7    binlog.000042… INS  custo… / {ten… cdc                         ││    tems                  │
+│  9    binlog.000042… UPD  custo… / {ten… cdc          collision in … ││  pk                      │
+│  12   binlog.000042… UPD  custo… / {ten… cdc          collision in … ││      [{tenant_id=17001…  │
+│  15   binlog.000042… UPD  enter… / {ten… cdc                         ││        …                 │
+│  17   binlog.000042… INS  custo… / {ten… cdc                         ││      {tenant_id=17001…]  │
+│  19   binlog.000042… UPD  custo… / {ten… cdc                         ││                          │
+│  21   binlog.000042… UPD  enter… / {ten… cdc                         ││  ▼ Low Watermark         │
+│  23   binlog.000042… UPD  custo… / {ten… cdc                         ││     lsn binlog.000042:10 │
+│  25   binlog.000042… HW                  wm-received  chunk 42       ││     latency 10 ms        │
+╰──────────────────────────────────────────────────────────────────────╯│                          │
+╭ SINK STREAM  ·  post-reconciliation · what downstream consumers s… ──╮│  chunk buffer (40 rows)  │
+│  seq  LSN                op   table / pk     origin   badge          ││    [{tenant_id=1700123…  │
+│  18   binlog.000042:1416 INS  custo… / {ten… LOG      chunk 42 · IN… ││      …                   │
+│  20   binlog.000042:1420 UPD  custo… / {ten… LOG      chunk 42 · IN… ││    {tenant_id=1700123…]  │
+│  22   binlog.000042:1524 UPD  enter… / {ten… LOG      chunk 42 · IN… ││    excluded (2):         │
+│  24   binlog.000042:1728 UPD  custo… / {ten… LOG      chunk 42 · IN… ││      ✗ {tenant_id=170…   │
+│  26   binlog.000042:1920 UPD  custo… / {ten… SELECT   chunk 42       ││      ✗ {tenant_id=170…   │
+│  27   binlog.000042:1920 UPD  custo… / {ten… SELECT   chunk 42       ││                          │
+│  28   binlog.000042:1920 UPD  custo… / {ten… SELECT   chunk 42       ││  in-window cdc           │
+│  29   binlog.000042:1920 UPD  custo… / {ten… SELECT   chunk 42       ││   ✗ UPD pk={tenant_id=1… │
+│  30   binlog.000042:1920 UPD  custo… / {ten… SELECT   chunk 42       ││   ✗ UPD pk={tenant_id=1… │
+│  31   binlog.000042:1920 UPD  custo… / {ten… SELECT   chunk 42       ││   · 6 passthrough        │
+│  32   binlog.000042:1920 UPD  custo… / {ten… SELECT   chunk 42       ││  … 7 more line(s) hidden │
+╰──────────────────────────────────────────────────────────────────────╯╰──────────────────────────╯
+ q  quit    space  step / advance  s  toggle step  n/m  slower / faster  f  full speed

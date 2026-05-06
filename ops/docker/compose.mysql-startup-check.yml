@@ -1,0 +1,15 @@
+services:
+  dblog:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    depends_on:
+      mysql:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    command:
+      - --spring.config.additional-location=file:/etc/dblog/application.properties
+    volumes:
+      - ./examples/mysql-startup-check/application.properties:/etc/dblog/application.properties:ro
+      - ./example-state/mysql-startup-check:/var/lib/dblog/state

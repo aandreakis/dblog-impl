@@ -1,0 +1,27 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/aandreakis/dblog-impl/blob/main/docs/schema/events/chunk-selected.schema.json",
+  "title": "ChunkSelected",
+  "description": "A chunk SELECT finished inside the currently open watermark window.",
+  "type": "object",
+  "properties": {
+    "v":              { "description": "Tap schema version; always 1.", "type": "integer", "minimum": 1 },
+    "seq":            { "description": "Monotonic per-run sequence number.", "type": "integer", "minimum": 0 },
+    "ts":             { "description": "ISO-8601 UTC timestamp with microsecond resolution.", "type": "string", "format": "date-time" },
+    "run_id":         { "description": "DBLog runtime run identifier.", "type": "string", "minLength": 1 },
+    "source_id":      { "description": "Configured dblog.source.id.", "type": "string", "minLength": 1 },
+    "kind":           { "type": "string", "enum": ["chunk.selected"] },
+    "chunk_id":       { "type": "integer", "minimum": 0 },
+    "request_id":     { "type": "string" },
+    "dump_id":        { "description": "Stamped on refresh rows as ChangeEvent.dumpId.", "type": "string" },
+    "table":          { "type": "string" },
+    "mode":           { "description": "Always \"range\" in the current core.", "type": "string", "enum": ["range"] },
+    "pk_min":         { "description": "Lower bound PK literal. Absent when the chunk is empty.", "type": "string" },
+    "pk_max":         { "description": "Upper bound PK literal. Absent when the chunk has no last-primary-key tuple.", "type": "string" },
+    "start_after_pk": { "description": "Previous chunk's last PK. Absent on the first chunk.", "type": "string" },
+    "row_count":      { "description": "Rows the SELECT returned.", "type": "integer", "minimum": 0 },
+    "final_chunk":    { "type": "boolean" },
+    "fingerprint":    { "description": "TableSchema.fingerprint() — identifies the schema revision.", "type": "string" }
+  },
+  "required": ["v", "ts", "run_id", "source_id", "kind", "chunk_id", "request_id", "dump_id", "table", "mode", "row_count", "final_chunk", "fingerprint"]
+}

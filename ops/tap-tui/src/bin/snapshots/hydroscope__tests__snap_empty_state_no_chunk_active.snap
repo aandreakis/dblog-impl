@@ -1,0 +1,35 @@
+---
+source: src/bin/hydroscope.rs
+assertion_line: 1721
+expression: text
+---
+ DBLOG · HYDROSCOPE   · run «waiting» · source —
+ ● connected · http://127.0.0.1:8085/api/v1/tap/stream   request —   pace full
+╭ SOURCE EVENTS  ·  tap stream, seq-ordered — cdc + watermark + chunk ────────────────────────────────────────────╮╭ RECONCILER  ·  live chunk state ──────────╮
+│  seq  LSN op   table / pk     kind         note                                                                 ││                                           │
+│                                                                                                                 ││  no chunk active                          │
+│                                                                                                                 ││                                           │
+│                                                                                                                 ││  CDC events flow                          │
+│                                                                                                                 ││  directly to the sink                     │
+│                                                                                                                 ││                                           │
+│                                                                                                                 ││                                           │
+│                                                                                                                 ││                                           │
+│                                                                                                                 ││                                           │
+│                                                                                                                 ││                                           │
+│                                                                                                                 ││                                           │
+│                                                                                                                 ││                                           │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯│                                           │
+╭ SINK STREAM  ·  post-reconciliation · what downstream consumers see ────────────────────────────────────────────╮│                                           │
+│  seq  LSN op   table / pk     origin   badge                                                                    ││                                           │
+│                                                                                                                 ││                                           │
+│                                                                                                                 ││                                           │
+│                                                                                                                 ││                                           │
+│                                                                                                                 ││                                           │
+│                                                                                                                 ││                                           │
+│                                                                                                                 ││                                           │
+│                                                                                                                 ││                                           │
+│                                                                                                                 ││                                           │
+│                                                                                                                 ││                                           │
+│                                                                                                                 ││                                           │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯╰───────────────────────────────────────────╯
+ q  quit    space  step / advance  s  toggle step  n/m  slower / faster  f  full speed

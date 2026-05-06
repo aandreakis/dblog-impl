@@ -1,0 +1,21 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/aandreakis/dblog-impl/blob/main/docs/schema/events/cdc-event.schema.json",
+  "title": "CdcEvent",
+  "description": "One CDC row change observed on the source change stream.",
+  "type": "object",
+  "properties": {
+    "v":         { "description": "Tap schema version; always 1.", "type": "integer", "minimum": 1 },
+    "seq":       { "description": "Monotonic per-run sequence number.", "type": "integer", "minimum": 0 },
+    "ts":        { "description": "ISO-8601 UTC timestamp with microsecond resolution.", "type": "string", "format": "date-time" },
+    "run_id":    { "description": "DBLog runtime run identifier.", "type": "string", "minLength": 1 },
+    "source_id": { "description": "Configured dblog.source.id.", "type": "string", "minLength": 1 },
+    "kind":      { "type": "string", "enum": ["cdc"] },
+    "lsn":       { "description": "Source position display value.", "type": "string" },
+    "op":        { "type": "string", "enum": ["INSERT", "UPDATE", "DELETE"] },
+    "table":     { "description": "Display name, e.g. \"app.orders\".", "type": "string" },
+    "pk":        { "description": "Canonical primary-key literal.", "type": "string" },
+    "tx_id":     { "description": "Source transaction id when available.", "type": "string" }
+  },
+  "required": ["v", "ts", "run_id", "source_id", "kind", "lsn", "op", "table", "pk"]
+}

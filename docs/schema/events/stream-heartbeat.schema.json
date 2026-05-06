@@ -1,0 +1,18 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/aandreakis/dblog-impl/blob/main/docs/schema/events/stream-heartbeat.schema.json",
+  "title": "StreamHeartbeat",
+  "description": "Liveness plus queue-depth sample. Emitted when the pump commits a batch and at least dblog.tap.heartbeat-interval has elapsed since the last heartbeat.",
+  "type": "object",
+  "properties": {
+    "v":              { "description": "Tap schema version; always 1.", "type": "integer", "minimum": 1 },
+    "seq":            { "description": "Monotonic per-run sequence number.", "type": "integer", "minimum": 0 },
+    "ts":             { "description": "ISO-8601 UTC timestamp with microsecond resolution.", "type": "string", "format": "date-time" },
+    "run_id":         { "description": "DBLog runtime run identifier.", "type": "string", "minLength": 1 },
+    "source_id":      { "description": "Configured dblog.source.id.", "type": "string", "minLength": 1 },
+    "kind":           { "type": "string", "enum": ["stream.heartbeat"] },
+    "queue_depth":    { "type": "integer", "minimum": 0 },
+    "queue_capacity": { "type": "integer", "minimum": 1 }
+  },
+  "required": ["v", "ts", "run_id", "source_id", "kind", "queue_depth", "queue_capacity"]
+}

@@ -1,0 +1,236 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="830" viewBox="170 20 1600 830" role="img" aria-labelledby="title desc">
+  <title id="title">DBLog one-window reconciliation diagram</title>
+  <desc id="desc">A DBLog watermark window with one bounded chunk read, live log events, one collision where the log event wins, and a reconciled output stream containing log events and surviving chunk rows.</desc>
+
+  <defs>
+    <style>
+      :root {
+        /* Page chrome */
+        --ink: #1f2328;
+        --muted: #59636e;
+        --paper: #f6f8fa;
+        --line: #243047;
+
+        /* Steel Navy palette - same hues as the Hydroscope TUI */
+        --log: #6ab1ff;             /* CDC / log events:        BLUE  */
+        --log-card-fill: #0e1a30;
+        --watermark: #f08470;       /* WRITE LOW/HIGH, gates:   RED   */
+        --watermark-card-fill: #2a1612;
+        --chunk: #66d3c0;           /* chunk SELECT (surviving): MINT */
+        --chunk-card-fill: #0d2c2a;
+        --omitted: #eab95c;         /* log-won eviction (evicted row): YEL */
+        --orange:  #f0a850;         /* log-won summary (label/arrow): ORANGE */
+        --omitted-card-fill: #2c1f0e;
+      }
+
+      .bg { fill: var(--paper); }
+      .lane { stroke: var(--line); stroke-width: 1.9; fill: none; stroke-linecap: round; }
+      .hair { stroke: var(--muted); stroke-width: 1.4; fill: none; stroke-linecap: round; }
+
+      /* Watermark gate lines: RED. Chunk-to-output dashed connector: MINT. */
+      .dash-blue { stroke: var(--watermark); stroke-width: 1.8; stroke-dasharray: 8 8; fill: none; }
+      .dash-blue-soft { stroke: var(--ink); stroke-width: 1.5; stroke-dasharray: 7 8; fill: none; }
+      .gate-dot { fill: var(--watermark); }
+
+      .step { fill: var(--ink); font: 700 31px/1.1 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; letter-spacing: 0.01em; }
+      .lane-label { fill: var(--muted); opacity: 0.66; font: 700 24px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; letter-spacing: 0.015em; }
+      .lane-title { fill: var(--ink); font: 700 28px/1.1 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; letter-spacing: 0.005em; }
+      .sub { fill: var(--ink); font: 500 22px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      .note { fill: var(--muted); font: 500 19px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+
+      /* Watermark text labels (LOW, HIGH, WATERMARK WINDOW): RED. */
+      /* (Class names retain the historic "blue" suffix to minimise diff churn) */
+      .label-blue { fill: var(--watermark); font: 700 24px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; letter-spacing: 0.015em; }
+      .label-small-blue { fill: var(--watermark); font: 650 18px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      .label-small { fill: var(--ink); font: 650 18px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      .legend { fill: var(--muted); font: 500 18px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+
+      /* Chunk-read text labels (ONE BOUNDED CHUNK READ): MINT. */
+      .label-cyan { fill: var(--ink); font: 700 24px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; letter-spacing: 0.015em; }
+      .label-small-cyan { fill: var(--ink); font: 650 18px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+
+      .card-text-blue { fill: var(--log); font: 650 18px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      .card-text-teal { fill: var(--chunk); font: 650 18px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      .card-text-drop { fill: var(--omitted); font: 650 18px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+
+      .event-card { fill: var(--log-card-fill); stroke: var(--log); stroke-width: 1.55; }
+      .chunk-card { fill: var(--chunk-card-fill); stroke: var(--chunk); stroke-width: 1.55; }
+      .omitted-card { fill: var(--omitted-card-fill); stroke: var(--omitted); stroke-width: 1.55; stroke-dasharray: 7 5; }
+      .window-band { fill: var(--paper); stroke: var(--ink); stroke-width: 1.55; stroke-dasharray: 8 7; }
+
+      .legend-box-blue { fill: var(--log-card-fill); stroke: var(--log); stroke-width: 1.55; }
+      .legend-box-teal { fill: var(--chunk-card-fill); stroke: var(--chunk); stroke-width: 1.55; }
+      .legend-box-red { fill: var(--omitted-card-fill); stroke: var(--omitted); stroke-width: 1.55; }
+
+      .collision { stroke: var(--orange); stroke-width: 2.2; fill: none; }
+      .cross { stroke: var(--omitted); stroke-width: 2; fill: none; stroke-linecap: round; }
+    </style>
+
+    <marker id="arrow" viewBox="0 0 12 12" refX="10.5" refY="6" markerWidth="11" markerHeight="11" orient="auto-start-reverse">
+      <path d="M 0 0 L 12 6 L 0 12 z" fill="#243047"/>
+    </marker>
+    <marker id="arrow-orange" viewBox="0 0 12 12" refX="10.5" refY="6" markerWidth="10" markerHeight="10" orient="auto">
+      <path d="M 0 0 L 12 6 L 0 12 z" fill="#eab95c"/>
+    </marker>
+    <marker id="arrow-blue" viewBox="0 0 12 12" refX="10.5" refY="6" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 12 6 L 0 12 z" fill="#f08470"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" x="170" y="20" width="1600" height="830"/>
+
+  <g id="diagram-body" transform="translate(0 0)">
+  <g id="metadata-writes">
+    <g id="write-low">
+      <rect x="610" y="65" width="80" height="80" rx="9" fill="var(--watermark-card-fill)" stroke="var(--watermark)" stroke-width="1.9"/>
+      <text class="label-small-blue" x="650" y="96" text-anchor="middle">WRITE</text>
+      <text class="label-blue" x="650" y="128" text-anchor="middle">LOW</text>
+    </g>
+    <g id="write-high">
+      <rect x="1191" y="65" width="82" height="80" rx="9" fill="var(--watermark-card-fill)" stroke="var(--watermark)" stroke-width="1.9"/>
+      <text class="label-small-blue" x="1232" y="96" text-anchor="middle">WRITE</text>
+      <text class="label-blue" x="1232" y="128" text-anchor="middle">HIGH</text>
+    </g>
+  </g>
+
+  <g id="source-log-lane">
+    <path class="lane" d="M 320 285 H 1630" marker-end="url(#arrow)"/>
+    <text class="lane-label" x="284" y="254" text-anchor="middle">LOG</text>
+    <text class="step" x="300" y="291" text-anchor="end">...</text>
+
+    <g id="pre-window-log-events">
+      <g transform="translate(415 243)">
+        <rect class="event-card" width="92" height="84" rx="9"/>
+        <text class="card-text-blue" x="46" y="32" text-anchor="middle">UPDATE</text>
+        <text class="card-text-blue" x="46" y="62" text-anchor="middle">pk=39</text>
+      </g>
+    </g>
+
+    <g id="low-high-observed">
+      <path class="dash-blue" d="M 650 145 V 438"/>
+      <circle class="gate-dot" cx="650" cy="285" r="10"/>
+      <rect x="599" y="331" width="102" height="63" rx="6" fill="var(--paper)"/>
+      <text class="label-blue" x="650" y="354" text-anchor="middle">LOW</text>
+      <text class="label-small-blue" x="650" y="383" text-anchor="middle">(observed)</text>
+
+      <path class="dash-blue" d="M 1232 145 V 438"/>
+      <circle class="gate-dot" cx="1232" cy="285" r="10"/>
+      <rect x="1175" y="331" width="114" height="63" rx="6" fill="var(--paper)"/>
+      <text class="label-blue" x="1232" y="354" text-anchor="middle">HIGH</text>
+      <text class="label-small-blue" x="1232" y="383" text-anchor="middle">(observed)</text>
+    </g>
+
+    <g id="watermark-window">
+      <path d="M 660 190 H 1222" stroke="var(--watermark)" stroke-width="2.1" fill="none" marker-start="url(#arrow-blue)" marker-end="url(#arrow-blue)"/>
+      <rect x="809" y="168" width="264" height="38" fill="var(--paper)"/>
+      <text class="label-blue" x="941" y="195" text-anchor="middle">WATERMARK WINDOW</text>
+    </g>
+
+    <g id="in-window-log-events">
+      <g transform="translate(745 243)">
+        <rect class="event-card" width="92" height="84" rx="9"/>
+        <text class="card-text-blue" x="46" y="32" text-anchor="middle">DELETE</text>
+        <text class="card-text-blue" x="46" y="62" text-anchor="middle">pk=37</text>
+      </g>
+      <g transform="translate(895 243)">
+        <rect class="event-card" width="92" height="84" rx="9"/>
+        <text class="card-text-blue" x="46" y="32" text-anchor="middle">UPDATE</text>
+        <text class="card-text-blue" x="46" y="62" text-anchor="middle">pk=42</text>
+      </g>
+      <g transform="translate(1045 243)">
+        <rect class="event-card" width="92" height="84" rx="9"/>
+        <text class="card-text-blue" x="46" y="32" text-anchor="middle">UPDATE</text>
+        <text class="card-text-blue" x="46" y="62" text-anchor="middle">pk=46</text>
+      </g>
+    </g>
+
+    <g id="post-window-log-events">
+      <g transform="translate(1480 243)">
+        <rect class="event-card" width="92" height="84" rx="9"/>
+        <text class="card-text-blue" x="46" y="32" text-anchor="middle">DELETE</text>
+        <text class="card-text-blue" x="46" y="62" text-anchor="middle">pk=39</text>
+      </g>
+    </g>
+  </g>
+
+  <g id="chunk-read">
+    <rect class="window-band" x="624" y="438" width="635" height="190" rx="18"/>
+    <rect x="766" y="414" width="351" height="58" fill="var(--paper)"/>
+    <text class="label-cyan" x="941" y="443" text-anchor="middle">ONE BOUNDED CHUNK READ</text>
+    <text class="label-small-cyan" x="941" y="472" text-anchor="middle">(between LOW and HIGH write)</text>
+
+    <g id="chunk-rows" transform="translate(0 0)">
+      <g transform="translate(750 510)">
+        <rect class="chunk-card" width="102" height="84" rx="9"/>
+        <text class="card-text-teal" x="51" y="50" text-anchor="middle">pk=41</text>
+      </g>
+      <g id="omitted-pk-42" transform="translate(890 510)">
+        <rect class="omitted-card" width="102" height="84" rx="9"/>
+        <text class="card-text-drop" x="51" y="50" text-anchor="middle">pk=42</text>
+        <path class="cross" d="M 10 9 L 92 75 M 92 9 L 10 75"/>
+      </g>
+      <g transform="translate(1030 510)">
+        <rect class="chunk-card" width="102" height="84" rx="9"/>
+        <text class="card-text-teal" x="51" y="50" text-anchor="middle">pk=43</text>
+      </g>
+    </g>
+  </g>
+
+  <g id="collision-log-wins">
+    <path class="collision" d="M 941 335 V 410" marker-end="url(#arrow-orange)"/>
+    <text x="1008" y="376" text-anchor="middle" fill="var(--orange)" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="24" font-weight="650">log wins</text>
+  </g>
+
+  <g id="reconciled-output-lane">
+    <path class="lane" d="M 320 730 H 1630" marker-end="url(#arrow)"/>
+    <text class="lane-label" x="284" y="699" text-anchor="middle">OUTPUT</text>
+    <text class="step" x="300" y="736" text-anchor="end">...</text>
+
+    <g id="output-log-events">
+      <g transform="translate(415 688)">
+        <rect class="event-card" width="92" height="84" rx="9"/>
+        <text class="card-text-blue" x="46" y="32" text-anchor="middle">UPDATE</text>
+        <text class="card-text-blue" x="46" y="62" text-anchor="middle">pk=39</text>
+      </g>
+      <g transform="translate(745 688)">
+        <rect class="event-card" width="92" height="84" rx="9"/>
+        <text class="card-text-blue" x="46" y="32" text-anchor="middle">DELETE</text>
+        <text class="card-text-blue" x="46" y="62" text-anchor="middle">pk=37</text>
+      </g>
+      <g transform="translate(895 688)">
+        <rect class="event-card" width="92" height="84" rx="9"/>
+        <text class="card-text-blue" x="46" y="32" text-anchor="middle">UPDATE</text>
+        <text class="card-text-blue" x="46" y="62" text-anchor="middle">pk=42</text>
+      </g>
+      <g transform="translate(1045 688)">
+        <rect class="event-card" width="92" height="84" rx="9"/>
+        <text class="card-text-blue" x="46" y="32" text-anchor="middle">UPDATE</text>
+        <text class="card-text-blue" x="46" y="62" text-anchor="middle">pk=46</text>
+      </g>
+    </g>
+
+    <path class="dash-blue-soft" d="M 1232 628 V 730"/>
+
+    <g id="output-surviving-chunk-rows">
+      <g transform="translate(1248 688)">
+        <rect class="chunk-card" width="92" height="84" rx="9"/>
+        <text class="card-text-teal" x="46" y="50" text-anchor="middle">pk=41</text>
+      </g>
+      <g transform="translate(1364 688)">
+        <rect class="chunk-card" width="92" height="84" rx="9"/>
+        <text class="card-text-teal" x="46" y="50" text-anchor="middle">pk=43</text>
+      </g>
+    </g>
+
+    <g id="output-post-window-log-events">
+      <g transform="translate(1480 688)">
+        <rect class="event-card" width="92" height="84" rx="9"/>
+        <text class="card-text-blue" x="46" y="32" text-anchor="middle">DELETE</text>
+        <text class="card-text-blue" x="46" y="62" text-anchor="middle">pk=39</text>
+      </g>
+    </g>
+  </g>
+
+  </g>
+
+</svg>

@@ -1,0 +1,21 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/aandreakis/dblog-impl/blob/main/docs/schema/tap-event.schema.json",
+  "title": "TapEvent",
+  "description": "One event emitted by DBLog's educational observability tap over GET /api/v1/tap/stream. Off by default and never for production use. This file is the union of the per-kind schemas under events/ — Rust/TypeScript consumers point their codegen (typify, quicktype, etc.) here. The Java POJOs are generated from the per-kind files under events/, not from this union.",
+  "oneOf": [
+    { "$ref": "events/cdc-event.schema.json" },
+    { "$ref": "events/sink-event.schema.json" },
+    { "$ref": "events/watermark-written.schema.json" },
+    { "$ref": "events/watermark-received.schema.json" },
+    { "$ref": "events/chunk-selected.schema.json" },
+    { "$ref": "events/chunk-collision.schema.json" },
+    { "$ref": "events/chunk-completed.schema.json" },
+    { "$ref": "events/checkpoint-advanced.schema.json" },
+    { "$ref": "events/request-transition.schema.json" },
+    { "$ref": "events/error-event.schema.json" },
+    { "$ref": "events/stream-heartbeat.schema.json" },
+    { "$ref": "events/stream-standby.schema.json" },
+    { "$ref": "events/stream-resumed.schema.json" }
+  ]
+}

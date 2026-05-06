@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+  <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+
+  <!--
+    Pattern includes MDC keys sourceId / runId / requestId / table in [brackets]. Keys are only
+    set at scope boundaries (runtime open, request batch, chunk coordination) and emit as empty
+    brackets when absent so the layout stays stable. See docs/OPERATION.md on MDC.
+  -->
+  <property name="DBLOG_LOG_PATTERN"
+      value="%d{${LOG_DATEFORMAT_PATTERN:-yyyy-MM-dd HH:mm:ss.SSS}} ${LOG_LEVEL_PATTERN:-%5p} ${PID:- } --- [%15.15t] [sourceId=%X{sourceId:-} runId=%X{runId:-} requestId=%X{requestId:-} table=%X{table:-}] %-40.40logger{39} : %m%n${LOG_EXCEPTION_CONVERSION_WORD:-%wEx}"/>
+
+  <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+    <encoder>
+      <pattern>${DBLOG_LOG_PATTERN}</pattern>
+      <charset>UTF-8</charset>
+    </encoder>
+  </appender>
+
+  <appender name="ASYNC_CONSOLE" class="ch.qos.logback.classic.AsyncAppender">
+    <queueSize>8192</queueSize>
+    <discardingThreshold>0</discardingThreshold>
+    <neverBlock>true</neverBlock>
+    <maxFlushTime>5000</maxFlushTime>
+    <appender-ref ref="CONSOLE"/>
+  </appender>
+
+  <root level="INFO">
+    <appender-ref ref="ASYNC_CONSOLE"/>
+  </root>
+</configuration>

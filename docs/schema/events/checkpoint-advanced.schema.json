@@ -1,0 +1,19 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/aandreakis/dblog-impl/blob/main/docs/schema/events/checkpoint-advanced.schema.json",
+  "title": "CheckpointAdvanced",
+  "description": "Buffered streaming checkpoint rolled forward.",
+  "type": "object",
+  "properties": {
+    "v":               { "description": "Tap schema version; always 1.", "type": "integer", "minimum": 1 },
+    "seq":             { "description": "Monotonic per-run sequence number.", "type": "integer", "minimum": 0 },
+    "ts":              { "description": "ISO-8601 UTC timestamp with microsecond resolution.", "type": "string", "format": "date-time" },
+    "run_id":          { "description": "DBLog runtime run identifier.", "type": "string", "minLength": 1 },
+    "source_id":       { "description": "Configured dblog.source.id.", "type": "string", "minLength": 1 },
+    "kind":            { "type": "string", "enum": ["checkpoint.advanced"] },
+    "position":        { "description": "New durable checkpoint LSN.", "type": "string" },
+    "buffered_events": { "type": "integer", "minimum": 0 },
+    "reason":          { "type": "string", "enum": ["count", "time", "bytes", "boundary"] }
+  },
+  "required": ["v", "ts", "run_id", "source_id", "kind", "position", "buffered_events", "reason"]
+}

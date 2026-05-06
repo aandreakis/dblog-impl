@@ -1,0 +1,22 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/aandreakis/dblog-impl/blob/main/docs/schema/events/request-transition.schema.json",
+  "title": "RequestTransition",
+  "description": "A dump request's durable state changed.",
+  "type": "object",
+  "properties": {
+    "v":          { "description": "Tap schema version; always 1.", "type": "integer", "minimum": 1 },
+    "seq":        { "description": "Monotonic per-run sequence number.", "type": "integer", "minimum": 0 },
+    "ts":         { "description": "ISO-8601 UTC timestamp with microsecond resolution.", "type": "string", "format": "date-time" },
+    "run_id":     { "description": "DBLog runtime run identifier.", "type": "string", "minLength": 1 },
+    "source_id":  { "description": "Configured dblog.source.id.", "type": "string", "minLength": 1 },
+    "kind":       { "type": "string", "enum": ["request.transition"] },
+    "request_id": { "type": "string" },
+    "scope":      { "type": "string", "enum": ["TABLE", "PRIMARY_KEYS", "ALL_TABLES"] },
+    "table":      { "description": "Required for TABLE and PRIMARY_KEYS; absent for ALL_TABLES.", "type": "string" },
+    "state":      { "type": "string", "enum": ["ACTIVE", "COMPLETED", "FAILED"] },
+    "prev_state": { "description": "Absent on the first-ever transition.", "type": "string", "enum": ["ACTIVE", "COMPLETED", "FAILED"] },
+    "reason":     { "description": "Populated when state=FAILED.", "type": "string" }
+  },
+  "required": ["v", "ts", "run_id", "source_id", "kind", "request_id", "scope", "state"]
+}

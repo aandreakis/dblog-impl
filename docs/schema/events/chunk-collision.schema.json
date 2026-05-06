@@ -1,0 +1,21 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/aandreakis/dblog-impl/blob/main/docs/schema/events/chunk-collision.schema.json",
+  "title": "ChunkCollision",
+  "description": "An in-window CDC event caused a PK removal from the chunk refresh buffer.",
+  "type": "object",
+  "properties": {
+    "v":           { "description": "Tap schema version; always 1.", "type": "integer", "minimum": 1 },
+    "seq":         { "description": "Monotonic per-run sequence number.", "type": "integer", "minimum": 0 },
+    "ts":          { "description": "ISO-8601 UTC timestamp with microsecond resolution.", "type": "string", "format": "date-time" },
+    "run_id":      { "description": "DBLog runtime run identifier.", "type": "string", "minLength": 1 },
+    "source_id":   { "description": "Configured dblog.source.id.", "type": "string", "minLength": 1 },
+    "kind":        { "type": "string", "enum": ["chunk.collision"] },
+    "chunk_id":    { "type": "integer", "minimum": 0 },
+    "excluded_pk": { "description": "Canonical PK literal of the row dropped from the buffer. Absent when the originating row-image has no captured schema.", "type": "string" },
+    "cause_lsn":   { "description": "LSN of the triggering in-window CDC event.", "type": "string" },
+    "cause_op":    { "type": "string", "enum": ["INSERT", "UPDATE", "DELETE"] },
+    "cause_tx_id": { "description": "Transaction id of the triggering CDC when available.", "type": "string" }
+  },
+  "required": ["v", "ts", "run_id", "source_id", "kind", "chunk_id", "cause_lsn", "cause_op"]
+}

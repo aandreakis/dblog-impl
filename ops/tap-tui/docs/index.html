@@ -1,0 +1,639 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Hydroscope — DBLog tap TUI documentation</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  :root {
+    /* Palette mirrors the Hydroscope TUI (see ops/tap-tui/src/bin/hydroscope.rs).
+       BG/BLUE/BDIM/WHITE/GRAY/YEL/CYAN/RED RGBs are the same constants
+       the TUI renders, so screenshots and the page share a tone. */
+    --bg:        #060d1c;
+    --panel:     #0b1528;
+    --panel-2:   #0f1e34;
+    --border:    #143054;
+    --fg:        #e4edfa;
+    --fg-dim:    #9bb0c8;
+    --fg-xdim:   #6f7e95;
+    --blue:      #6ab1ff;
+    --blue-dim:  #3a77b8;
+    --yellow:    #eab95c;
+    --cyan:      #66d3c0;
+    --red:       #f08470;
+    --code-bg:   #030712;
+    --radius:    6px;
+    --max:       980px;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  }
+  .wrap { max-width: var(--max); margin: 0 auto; padding: 48px 24px 96px; }
+  header.hero {
+    text-align: center;
+    padding: 56px 24px 24px;
+    border-bottom: 1px solid var(--border);
+  }
+  header.hero h1 {
+    font-size: 36px;
+    letter-spacing: -0.01em;
+    margin: 0 0 6px;
+    color: var(--blue);
+    font-weight: 700;
+  }
+  header.hero .tag {
+    color: var(--fg-dim);
+    font-size: 16px;
+    margin: 0;
+  }
+  header.hero .hero-media {
+    margin: 32px auto 0;
+    max-width: 1000px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    box-shadow: 0 8px 40px -12px rgba(106, 177, 255, 0.15);
+  }
+  header.hero .hero-media img {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+  header.hero .hero-note {
+    color: var(--fg-xdim);
+    font-size: 13px;
+    margin-top: 12px;
+    font-style: italic;
+  }
+  nav.toc {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px 20px;
+    margin: 32px 0;
+  }
+  nav.toc b { color: var(--fg-dim); font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; display: block; margin-bottom: 8px; }
+  nav.toc ol { list-style: decimal inside; padding: 0; margin: 0; columns: 2; column-gap: 24px; }
+  nav.toc li { padding: 3px 0; font-size: 14px; break-inside: avoid; }
+  nav.toc a { color: var(--fg); text-decoration: none; }
+  nav.toc a:hover { color: var(--blue); text-decoration: underline; }
+  h2 {
+    font-size: 24px;
+    color: var(--blue);
+    margin: 56px 0 12px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--border);
+    font-weight: 700;
+    letter-spacing: -0.005em;
+  }
+  h3 {
+    font-size: 17px;
+    color: var(--fg);
+    margin: 28px 0 8px;
+    font-weight: 600;
+  }
+  p { margin: 0 0 14px; }
+  a { color: var(--cyan); }
+  code, kbd, pre {
+    font-family: "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+    font-size: 13px;
+  }
+  p code, li code, td code {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    padding: 1px 5px;
+    border-radius: 3px;
+    color: var(--yellow);
+    font-size: 12.5px;
+  }
+  kbd {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-bottom-width: 2px;
+    padding: 1px 6px;
+    border-radius: 4px;
+    color: var(--fg);
+    font-size: 12px;
+  }
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 18px;
+    overflow-x: auto;
+    color: var(--fg);
+    line-height: 1.55;
+  }
+  pre.shell::before {
+    content: "$ ";
+    color: var(--blue-dim);
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 12px 0 20px;
+    font-size: 14px;
+  }
+  th, td {
+    padding: 8px 12px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  th { color: var(--fg-dim); font-weight: 600; background: var(--panel); }
+  tr:hover td { background: rgba(106, 177, 255, 0.03); }
+  .shot {
+    margin: 20px 0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    background: var(--panel);
+  }
+  .shot img { display: block; width: 100%; height: auto; }
+  /* First-column code in any reference table should never wrap — flag
+     names like `--scenario <name>` and scenario ids like
+     `chunk42-standby` need to stay on one line. */
+  table td:first-child code { white-space: nowrap; }
+  .shot-caption {
+    padding: 10px 16px;
+    border-top: 1px solid var(--border);
+    background: var(--panel-2);
+    font-size: 13px;
+    color: var(--fg-dim);
+  }
+  .anat-section {
+    margin: 32px 0;
+  }
+  .anat-section h3 {
+    margin: 0 0 4px;
+    color: var(--blue);
+    font-size: 18px;
+    font-weight: 600;
+  }
+  .anat-section .loc {
+    font-size: 12px;
+    color: var(--fg-xdim);
+    margin: 0 0 12px;
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .anat-section .shot {
+    margin: 12px 0 16px;
+  }
+  .anat-reconciler {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 20px;
+    align-items: start;
+  }
+  .anat-reconciler .shot img { max-width: 420px; }
+  @media (min-width: 720px) {
+    .anat-reconciler { grid-template-columns: 420px 1fr; }
+  }
+  .anat-section p:last-child { margin-bottom: 0; }
+  .note {
+    background: linear-gradient(135deg, rgba(234, 185, 92, 0.06), rgba(234, 185, 92, 0.02));
+    border-left: 3px solid var(--yellow);
+    padding: 12px 16px;
+    margin: 16px 0;
+    border-radius: 0 var(--radius) var(--radius) 0;
+    font-size: 14px;
+    color: var(--fg);
+  }
+  .note b { color: var(--yellow); }
+  .warn {
+    background: linear-gradient(135deg, rgba(240, 132, 112, 0.06), rgba(240, 132, 112, 0.02));
+    border-left: 3px solid var(--red);
+    padding: 12px 16px;
+    margin: 16px 0;
+    border-radius: 0 var(--radius) var(--radius) 0;
+    font-size: 14px;
+    color: var(--fg);
+  }
+  .warn b { color: var(--red); }
+  .chip {
+    display: inline-block;
+    padding: 1px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    letter-spacing: 0.04em;
+    margin-right: 4px;
+    border: 1px solid var(--border);
+  }
+  .chip.blue   { color: var(--blue);   border-color: rgba(106, 177, 255, 0.4); }
+  .chip.yellow { color: var(--yellow); border-color: rgba(234, 185, 92, 0.4); }
+  .chip.cyan   { color: var(--cyan);   border-color: rgba(102, 211, 192, 0.4); }
+  .chip.red    { color: var(--red);    border-color: rgba(240, 132, 112,  0.4); }
+  footer {
+    margin-top: 64px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border);
+    color: var(--fg-xdim);
+    font-size: 13px;
+  }
+  @media (min-width: 720px) {
+    /* legacy panel-grid kept for forward compat if needed */
+  }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <h1>Hydroscope</h1>
+  <p class="tag">DBLog tap TUI — a live, watermark-level view of chunked CDC reconciliation.</p>
+  <div class="hero-media">
+    <img src="img/hero.gif" alt="Hydroscope running the showcase scenario — 12 seconds of chunk lifecycles">
+  </div>
+  <p class="hero-note">~12 seconds of <code>--scenario showcase</code> at 120&nbsp;ms/event.</p>
+</header>
+
+<div class="wrap">
+
+<nav class="toc">
+  <b>Contents</b>
+  <ol>
+    <li><a href="#what">What you are looking at</a></li>
+    <li><a href="#build">Build</a></li>
+    <li><a href="#run">Run — demos &amp; live</a></li>
+    <li><a href="#config">Configuration (flags)</a></li>
+    <li><a href="#keys">Runtime keys</a></li>
+    <li><a href="#anatomy">UI anatomy</a></li>
+    <li><a href="#scenarios">Scenarios</a></li>
+    <li><a href="#troubleshoot">Troubleshooting</a></li>
+  </ol>
+</nav>
+
+<h2 id="what">What you are looking at</h2>
+
+<p>
+  DBLog bootstraps a consistent copy of a table with a snapshot that takes
+  rows <em>in small chunks</em>, interleaved with the live CDC stream.
+  Each chunk is bracketed by a pair of watermarks — <b>LW</b> (low
+  watermark) and <b>HW</b> (high watermark) — written to and read back
+  from the log itself. Any log event that arrives <em>between</em> LW and
+  HW touching a pk the chunk selected wins over the snapshot: the log
+  version is newer, the snapshot row is dropped from the refresh emit.
+</p>
+
+<p>
+  Hydroscope is a read-only observer that attaches to DBLog's educational
+  tap endpoint (<code>GET /api/v1/tap/stream</code>) and shows the
+  algorithm from the outside: every source-log event on the top-left,
+  every post-reconciliation sink event on the bottom-left, and the
+  live state of the active chunk's reconciler on the right.
+</p>
+
+<div class="warn">
+  <b>Never enable the tap in production.</b> The tap deliberately blocks
+  the DBLog pump when the subscriber can't keep up — that's the whole
+  point. Teaching machines only.
+</div>
+
+<h2 id="build">Build</h2>
+
+<pre class="shell">cd ops/tap-tui
+cargo build --release --bin hydroscope</pre>
+
+<p>Output: <code>target/release/hydroscope</code>. A single binary, no runtime dependencies beyond libc.</p>
+
+<h2 id="run">Run — demos &amp; live</h2>
+
+<h3>Offline / demo mode</h3>
+
+<p>
+  Three built-in scenarios replay scripted event streams without touching
+  a database. Same wire format as the live tap, so the UI rendering path
+  is identical:
+</p>
+
+<pre class="shell">target/release/hydroscope --scenario showcase      <span style="color:var(--fg-xdim)"># infinite, rich</span>
+target/release/hydroscope --scenario chunk42         <span style="color:var(--fg-xdim)"># finite, 1 chunk, teaching</span>
+target/release/hydroscope --scenario chunk42-standby <span style="color:var(--fg-xdim)"># chunk42 + standby pair</span>
+target/release/hydroscope --demo                     <span style="color:var(--fg-xdim)"># alias for chunk42</span></pre>
+
+<p>See <a href="#scenarios">Scenarios</a> below for what each one walks through.</p>
+
+<h3>Live mode</h3>
+
+<p>
+  Omit <code>--scenario</code> / <code>--demo</code> and hydroscope
+  connects to the DBLog tap:
+</p>
+
+<pre class="shell">target/release/hydroscope    <span style="color:var(--fg-xdim)"># default: 127.0.0.1:8085</span>
+target/release/hydroscope --url http://host:port/api/v1/tap/stream</pre>
+
+<p>
+  Requires the tap to be enabled in the DBLog runtime — see
+  <code>docs/OPERATION.md § 5.1.2</code> and
+  <code>docs/CONTROL_PLANE.md § 5.4</code> in the main repo.
+  <code>503 tap_not_enabled</code> surfaces as a clear disconnect banner
+  with reconnect backoff. Run-id changes (process restart on the DBLog
+  side) reset UI state.
+</p>
+
+<h2 id="config">Configuration (flags)</h2>
+
+<table>
+  <thead>
+    <tr><th>Flag</th><th>Default</th><th>Effect</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>--scenario &lt;name&gt;</code></td>
+      <td>—</td>
+      <td><code>chunk42</code>, <code>chunk42-standby</code>, <code>showcase</code></td>
+    </tr>
+    <tr>
+      <td><code>--demo</code></td>
+      <td>off</td>
+      <td>Shorthand for <code>--scenario chunk42</code></td>
+    </tr>
+    <tr>
+      <td><code>--slowdown &lt;ms&gt;</code></td>
+      <td>100 (showcase) · 350 (chunk42) · 0 (live)</td>
+      <td>Sleep N ms between events. <em>Higher = slower.</em> Adjustable at runtime with <kbd>n</kbd> / <kbd>m</kbd>.</td>
+    </tr>
+    <tr>
+      <td><code>--step</code></td>
+      <td>off</td>
+      <td>Start in step mode — one event per <kbd>space</kbd>.</td>
+    </tr>
+    <tr>
+      <td><code>--url &lt;URL&gt;</code></td>
+      <td><code>http://127.0.0.1:8085/api/v1/tap/stream</code></td>
+      <td>Live mode tap endpoint.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 id="keys">Runtime keys</h2>
+
+<table>
+  <thead><tr><th>Key</th><th>Effect</th></tr></thead>
+  <tbody>
+    <tr><td><kbd>q</kbd> · <kbd>Esc</kbd> · <kbd>Ctrl</kbd>+<kbd>C</kbd></td><td>Quit</td></tr>
+    <tr><td><kbd>space</kbd></td><td>In step mode, advance one event; otherwise enter step mode.</td></tr>
+    <tr><td><kbd>s</kbd></td><td>Toggle step mode</td></tr>
+    <tr><td><kbd>n</kbd></td><td>Slow down by 100&nbsp;ms</td></tr>
+    <tr><td><kbd>m</kbd></td><td>Speed up by 100&nbsp;ms (clamped to 0)</td></tr>
+    <tr><td><kbd>f</kbd></td><td>Full speed (delay = 0)</td></tr>
+  </tbody>
+</table>
+
+<p>Pace state is surfaced in the banner: <code>full</code>, <code>N ms/event</code>, or <code>STEP (space=next)</code>.</p>
+
+<h2 id="anatomy">UI anatomy</h2>
+
+<p>
+  The screen is split 72% / 28% horizontally. Left column stacks
+  <b>SOURCE LOG</b> (top) and <b>SINK STREAM</b> (bottom); right column
+  is the <b>RECONCILER</b> sidebar. Six distinct areas, each shown
+  below at its actual rendered size so you can read the content:
+</p>
+
+<div class="anat-section">
+  <h3>Title bar</h3>
+  <div class="loc">row 1 · always present</div>
+  <div class="shot"><img src="img/anat_titlebar.png" alt="Title bar: DBLOG · HYDROSCOPE, run id (first 13 chars), source id"></div>
+  <p>
+    Brand marker on the left, then <code>run &lt;id&gt;</code> (first 13
+    chars of the DBLog run UUID), <code>source_id</code>, and uptime
+    <code>t+HH:MM:SS.mmm</code>. The rightmost cell (clipped in this
+    narrow capture) is the window state label:
+  </p>
+  <p>
+    <span class="chip yellow">OPEN</span> LW received, HW pending ·
+    <span class="chip blue">CLOSING</span> HW received, chunk not yet <code>completed</code> ·
+    <span class="chip cyan">SELECTED</span> chunk selected but LW still pending ·
+    <span class="chip">—</span> no chunk active.
+  </p>
+</div>
+
+<div class="anat-section">
+  <h3>Connection banner</h3>
+  <div class="loc">row 2 · priority-ordered</div>
+  <div class="shot"><img src="img/anat_banner.png" alt="Banner showing ● connected · demo://chunk-42 · request 17 · TABLE orders · ACTIVE · pace full"></div>
+  <p>
+    Priority order: <b>standby &gt; error &gt; disconnect &gt;
+    connection state</b>. When healthy, shows <code>●&nbsp;connected</code>,
+    queue fill (<code>queue&nbsp;N/M&nbsp;(P%)</code>), the latest
+    request's id + scope + state, and current pace.
+  </p>
+  <p>
+    <span class="chip yellow">⚠ STANDBY</span> and
+    <span class="chip red">✗ ERROR</span> /
+    <span class="chip red">⚠ DISCONNECTED</span> are the attention
+    states — DISCONNECTED also shows uptime so you know how long we've
+    been retrying.
+  </p>
+</div>
+
+<div class="anat-section">
+  <h3>Source log</h3>
+  <div class="loc">top-left pane · 50% of the left column</div>
+  <div class="shot"><img src="img/anat_sourcelog.png" alt="Source log table with seq, LSN, op, table/pk, kind, note columns — showing wm-written, chunk-sel, cdc, and wm-received rows"></div>
+  <p>
+    Every tap event in the order it arrived. Columns:
+    <code>seq</code>, <code>t</code> (relative to first event),
+    <code>LSN</code>, <code>kind</code>, <code>op</code>,
+    <code>table / pk</code>, <code>note</code>.
+  </p>
+  <p>
+    Event kinds: <code>cdc</code>, <code>wm-written</code>,
+    <code>wm-received</code>, <code>chunk-sel</code>,
+    <code>chunk-drop</code>, <code>chunk-done</code>. Colour maps to
+    <a href="#colors">semantics below</a>.
+  </p>
+  <p>
+    <code>checkpoint.advanced</code> events are producer-side bookkeeping
+    — the TUI accepts them on the wire but intentionally drops them, so
+    the source log stays focused on what drives the reconciler.
+  </p>
+  <p>
+    Strictly wire-derived — no cross-referencing between event streams.
+    A collision surfaces as its own <code>chunk-drop</code> row on
+    arrival.
+  </p>
+</div>
+
+<div class="anat-section">
+  <h3>Sink stream</h3>
+  <div class="loc">bottom-left pane · 50% of the left column</div>
+  <div class="shot"><img src="img/anat_sinkstream.png" alt="Sink stream table with seq, t, LSN, op, table, pk, origin, badge columns — LOG and SELECT origins"></div>
+  <p>
+    What downstream consumers see after reconciliation. Columns:
+    <code>seq</code>, <code>t</code>, <code>LSN</code>, <code>op</code>,
+    <code>table</code>, <code>pk</code>, <code>origin</code>,
+    <code>badge</code>.
+  </p>
+  <p>
+    <span class="chip blue">LOG</span> = CDC passthrough ·
+    <span class="chip cyan">SELECT</span> = snapshot refresh row
+    emitted on <code>HW</code>. Badge surfaces the in-window chunk id
+    for LOG rows that landed inside a watermark window; it's empty
+    otherwise (including for SELECT rows — the origin already says
+    "snapshot refresh", and the active dump id is on the reconciler
+    sidebar).
+  </p>
+</div>
+
+<div class="anat-section">
+  <h3>Reconciler sidebar</h3>
+  <div class="loc">right column · 28% · full height</div>
+  <div class="anat-reconciler">
+    <div class="shot"><img src="img/anat_reconciler.png" alt="Reconciler sidebar showing LW token/lsn/latency, in-window cdc collisions + passthrough count, chunk buffer with excluded pks crossed out"></div>
+    <div>
+      <p>
+        Live state of the active chunk only. Flows top-to-bottom in
+        algorithm time-order:
+      </p>
+      <ol style="margin:0 0 10px 18px; padding:0;">
+        <li><code>pk&nbsp;[lo&nbsp;…&nbsp;hi]</code> — chunk's pk range</li>
+        <li><code>req</code> / <code>dump</code> — request + dump identity</li>
+        <li><code>▼&nbsp;LW</code> — low-watermark token, LSN, latency</li>
+        <li><code>in-window cdc</code> — collisions listed (up to 3), passthrough count</li>
+        <li><code>chunk buffer</code> — pk range visualisation, excluded pks <span style="text-decoration:line-through;color:var(--yellow)">crossed out</span></li>
+        <li><code>excluded (log won)</code> — up to 6 excluded pks one-per-line</li>
+        <li><code>△&nbsp;HW</code> — high-watermark token, LSN, latency</li>
+        <li><code>emit-ready</code> — refresh row count waiting on HW</li>
+        <li>metadata footer — <code>after</code> / <code>final</code> / <code>fp</code></li>
+      </ol>
+      <p>
+        Fixed-width sidebar — doesn't collapse or resize when the chunk
+        lifecycle advances, so the source/sink panels stay visually
+        anchored.
+      </p>
+    </div>
+  </div>
+</div>
+
+<div class="anat-section">
+  <h3>Footer</h3>
+  <div class="loc">row -1 · always present</div>
+  <div class="shot"><img src="img/anat_footer.png" alt="Footer showing keyboard shortcuts: q quit, space step/advance, s toggle step, n/m pace, f full speed"></div>
+  <p>
+    Keyboard shortcuts cheatsheet. See
+    <a href="#keys">Runtime keys</a> for the full reference.
+  </p>
+</div>
+
+<h3 id="colors">Colour semantics</h3>
+
+<p>Colours carry consistent meaning across panels:</p>
+
+<table>
+  <tbody>
+    <tr><td><span class="chip blue">BLUE</span></td>  <td>flowing / complete / healthy — CDC events, connected, LW received, HW on closed chunk</td></tr>
+    <tr><td><span class="chip yellow">YELLOW</span></td><td>anomaly / pending — collision triggers, HW pending, standby, excluded pk</td></tr>
+    <tr><td><span class="chip cyan">CYAN</span></td>   <td>process state — sink <code>origin=SELECT</code>, request lifecycle</td></tr>
+    <tr><td><span class="chip red">RED</span></td>     <td>hard signal — LW marker, error, disconnected banner</td></tr>
+    <tr><td><span class="chip">gray / dim</span></td>  <td>chrome and orientation — labels, placeholders, "no data yet"</td></tr>
+  </tbody>
+</table>
+
+<h2 id="scenarios">Scenarios</h2>
+
+<table>
+  <thead>
+    <tr><th>Scenario</th><th>Shape</th><th>What it exercises</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>chunk42</code></td>
+      <td>Finite (~65 events)</td>
+      <td>Single chunk, 2 collisions, 38 refresh rows. The algorithm's "hello world".</td>
+    </tr>
+    <tr>
+      <td><code>chunk42-standby</code></td>
+      <td>Finite</td>
+      <td><code>chunk42</code> plus a <code>stream.standby</code> / <code>stream.resumed</code> pair at the tail — exercises the backpressure banner.</td>
+    </tr>
+    <tr>
+      <td><code>showcase</code></td>
+      <td>Infinite</td>
+      <td>Scripted intro (4 chunks with increasing contention, standby interlude, final-chunk + request COMPLETED, non-fatal error), then procedural continuous traffic until quit.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>Showcase intro, step by step</h3>
+
+<ol>
+  <li>Pre-request warmup: heartbeat + plain CDC + checkpoint</li>
+  <li>Request 42 submitted (scope <code>TABLE</code>, <code>app.orders</code>) → <code>ACTIVE</code></li>
+  <li><b>Chunk 1</b> — 15 rows, 0 collisions (happy path)</li>
+  <li>Plain-CDC gap (DELETE + INSERT outside any window)</li>
+  <li><b>Chunk 2</b> — 15 rows, <b>3 collisions</b> (one is a DELETE hit)</li>
+  <li><code>stream.standby</code> + <code>stream.resumed</code> (backpressure interlude)</li>
+  <li><b>Chunk 3</b> — 20 rows, <b>5 collisions</b> (heavy contention)</li>
+  <li><b>Chunk 4</b> — 8 rows, 1 collision, <code>final_chunk=true</code></li>
+  <li>Request 42 <code>COMPLETED</code></li>
+  <li>Post-request plain CDC</li>
+  <li>An <code>error</code> event (<code>WatermarkSequenceException</code>, non-fatal)</li>
+  <li>Final heartbeat before the continuous loop starts</li>
+</ol>
+
+<p>
+  After the intro, the continuous loop emits deterministic
+  (xorshift-seeded) random traffic — plain CDC bursts, chunks of 10–30
+  rows with 0–5 collisions each, heartbeats, checkpoints, occasional
+  standby pairs and non-fatal errors — until you quit.
+</p>
+
+<div class="note">
+  <b>Tip:</b> Start with <code>--scenario chunk42</code> to see a full
+  chunk lifecycle start-to-finish, then run <code>--scenario showcase</code>
+  to see the pattern repeat at scale.
+</div>
+
+<h2 id="troubleshoot">Troubleshooting</h2>
+
+<h3>"terminal too narrow" / columns clipping</h3>
+
+<p>
+  Hydroscope is designed around a ~120-column wide terminal. On narrower
+  windows, the source-log and sink-stream tables drop rightmost columns
+  first (kind, note, badge). The reconciler sidebar holds its content but
+  tokens (UUIDs) and LSNs may clip mid-string.
+</p>
+
+<h3>503 <code>tap_not_enabled</code></h3>
+
+<p>
+  Live mode landing on a DBLog runtime whose tap is disabled. Enable
+  <code>dblog.tap.enabled=true</code> in <code>application.properties</code>
+  and restart. Disconnect banner retries automatically with backoff.
+</p>
+
+<h3>Pace feels wrong</h3>
+
+<p>
+  Defaults: <code>100 ms/event</code> for <code>showcase</code>,
+  <code>350 ms/event</code> for <code>chunk42</code> (slow enough to
+  read), <code>0</code> for live. Override with <code>--slowdown &lt;ms&gt;</code>
+  at launch or <kbd>n</kbd> / <kbd>m</kbd> / <kbd>f</kbd> at runtime.
+</p>
+
+<footer>
+  <p>
+    Source:
+    <code><a href="../src/bin/hydroscope.rs">src/bin/hydroscope.rs</a></code>
+    ·
+    <a href="../README.md">README</a>
+    ·
+    <a href="https://github.com/aandreakis/dblog-impl">repo</a>
+  </p>
+</footer>
+
+</div>
+
+</body>
+</html>

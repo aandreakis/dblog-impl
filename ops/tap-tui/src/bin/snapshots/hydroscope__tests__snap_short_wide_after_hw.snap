@@ -1,0 +1,45 @@
+---
+source: src/bin/hydroscope.rs
+assertion_line: 1684
+expression: text
+---
+ DBLOG · HYDROSCOPE   · run 3f290e82…e0c7d312 · source my_mysql_source
+ ● connected · demo://chunk-42   request 17 · TABLE orders · ACTIVE   pace full
+╭ SOURCE EVENTS  ·  tap stream, seq-ordered — cdc + watermark + chunk ────────────────────────────────────────────╮╭ RECONCILER  ·  live chunk state ──────────╮
+│  seq  LSN                op   table / pk     kind         note                                                  ││  chunk 42                                 │
+│  3    —                  LW                  wm-written   chunk 42                                              ││  table orders                             │
+│  4    —                  SEL  orders         chunk-sel    chunk 42 · pk [1001 … 1040]                           ││  pk    [1001 … 1040]                      │
+│  5    —                  HW                  wm-written   chunk 42                                              ││                                           │
+│  6    binlog.000042:1024 LW                  wm-received  chunk 42                                              ││  ▼ Low Watermark                          │
+│  7    binlog.000042:1048 INS  orders / 2044  cdc                                                                ││     lsn binlog.000042:1024                │
+│  9    binlog.000042:1152 UPD  orders / 1002  cdc          collision in chunk 42                                 ││     latency 10 ms                         │
+│  12   binlog.000042:1208 UPD  orders / 1004  cdc          collision in chunk 42                                 ││                                           │
+│  15   binlog.000042:1332 UPD  accounts / 77  cdc                                                                ││  chunk buffer (40 rows)                   │
+│  17   binlog.000042:1416 INS  orders / 2045  cdc                                                                ││    [1001  1002  1003  1004  1005  1006    │
+│  19   binlog.000042:1420 UPD  orders / 2045  cdc                                                                ││     1007  1008  1009  1010  1011  1012    │
+│  21   binlog.000042:1524 UPD  accounts / 77  cdc                                                                ││     1013  1014  1015  1016  1017  1018    │
+│  23   binlog.000042:1728 UPD  orders / 1900  cdc                                                                ││     1019  1020  1021  1022  1023  1024    │
+│  25   binlog.000042:1920 HW                  wm-received  chunk 42                                              ││     1025                                  │
+│                                                                                                                 ││     …  1038  1039  1040]                  │
+│                                                                                                                 ││                                           │
+│                                                                                                                 ││  in-window cdc                            │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯│   ✗ UPD pk=1002                           │
+╭ SINK STREAM  ·  post-reconciliation · what downstream consumers see ────────────────────────────────────────────╮│   ✗ UPD pk=1004                           │
+│  seq  LSN                op   table / pk     origin   badge                                                     ││   · 6 passthrough                         │
+│  8    binlog.000042:1048 INS  orders / 2044  LOG      chunk 42 · IN-WINDOW                                      ││                                           │
+│  11   binlog.000042:1152 UPD  orders / 1002  LOG      chunk 42 · LOG WON                                        ││  ▲ High Watermark                         │
+│  14   binlog.000042:1208 UPD  orders / 1004  LOG      chunk 42 · LOG WON                                        ││     lsn binlog.000042:1920                │
+│  16   binlog.000042:1332 UPD  accounts / 77  LOG      chunk 42 · IN-WINDOW                                      ││     latency 102 ms                        │
+│  18   binlog.000042:1416 INS  orders / 2045  LOG      chunk 42 · IN-WINDOW                                      ││                                           │
+│  20   binlog.000042:1420 UPD  orders / 2045  LOG      chunk 42 · IN-WINDOW                                      ││  replaced-by-cdc 2 rows                   │
+│  22   binlog.000042:1524 UPD  accounts / 77  LOG      chunk 42 · IN-WINDOW                                      ││  emit-ready 38 rows                       │
+│  24   binlog.000042:1728 UPD  orders / 1900  LOG      chunk 42 · IN-WINDOW                                      ││                                           │
+│  26   binlog.000042:1920 UPD  orders / 1001  SELECT   chunk 42                                                  ││                                           │
+│  27   binlog.000042:1920 UPD  orders / 1003  SELECT   chunk 42                                                  ││                                           │
+│  28   binlog.000042:1920 UPD  orders / 1005  SELECT   chunk 42                                                  ││                                           │
+│  29   binlog.000042:1920 UPD  orders / 1006  SELECT   chunk 42                                                  ││                                           │
+│  30   binlog.000042:1920 UPD  orders / 1007  SELECT   chunk 42                                                  ││                                           │
+│  31   binlog.000042:1920 UPD  orders / 1008  SELECT   chunk 42                                                  ││                                           │
+│  32   binlog.000042:1920 UPD  orders / 1009  SELECT   chunk 42                                                  ││                                           │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯╰───────────────────────────────────────────╯
+ q  quit    space  step / advance  s  toggle step  n/m  slower / faster  f  full speed
