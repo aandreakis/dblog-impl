@@ -42,4 +42,55 @@ class PrimaryKeyTupleTests {
     assertThat(fromPositional).isEqualTo(fromRow);
     assertThat(fromLiteral.compareTo(fromRow)).isZero();
   }
+
+  @Test
+  void canonicalCompositeLiteralRoundTripsBackslashes() {
+    ColumnDefinition tenant =
+        new ColumnDefinition("tenant", "varchar(64)", NeutralColumnType.STRING, true, 1, false);
+    ColumnDefinition externalId =
+        new ColumnDefinition(
+            "external_id", "varchar(128)", NeutralColumnType.STRING, true, 2, false);
+    List<ColumnDefinition> columns = List.of(tenant, externalId);
+    PrimaryKeyTuple original =
+        PrimaryKeyTuple.fromRow(
+            columns, Map.of("tenant", "tenant-a", "external_id", "folder\\record"));
+
+    PrimaryKeyTuple decoded = PrimaryKeyTuple.fromLiteral(columns, original.literal());
+
+    assertThat(decoded).isEqualTo(original);
+  }
+
+  @Test
+  void canonicalCompositeLiteralRoundTripsATrailingBackslash() {
+    ColumnDefinition tenant =
+        new ColumnDefinition("tenant", "varchar(64)", NeutralColumnType.STRING, true, 1, false);
+    ColumnDefinition externalId =
+        new ColumnDefinition(
+            "external_id", "varchar(128)", NeutralColumnType.STRING, true, 2, false);
+    List<ColumnDefinition> columns = List.of(tenant, externalId);
+    PrimaryKeyTuple original =
+        PrimaryKeyTuple.fromRow(
+            columns, Map.of("tenant", "tenant-a", "external_id", "a\\"));
+
+    PrimaryKeyTuple decoded = PrimaryKeyTuple.fromLiteral(columns, original.literal());
+
+    assertThat(decoded).isEqualTo(original);
+  }
+
+  @Test
+  void canonicalCompositeLiteralRoundTripsABackslashBeforeADelimiter() {
+    ColumnDefinition tenant =
+        new ColumnDefinition("tenant", "varchar(64)", NeutralColumnType.STRING, true, 1, false);
+    ColumnDefinition externalId =
+        new ColumnDefinition(
+            "external_id", "varchar(128)", NeutralColumnType.STRING, true, 2, false);
+    List<ColumnDefinition> columns = List.of(tenant, externalId);
+    PrimaryKeyTuple original =
+        PrimaryKeyTuple.fromRow(
+            columns, Map.of("tenant", "tenant-a", "external_id", "x\\,y"));
+
+    PrimaryKeyTuple decoded = PrimaryKeyTuple.fromLiteral(columns, original.literal());
+
+    assertThat(decoded).isEqualTo(original);
+  }
 }

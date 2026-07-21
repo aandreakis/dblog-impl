@@ -18,6 +18,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.time.OffsetDateTime;
+import java.time.OffsetTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -67,7 +68,9 @@ public final class JdbcPostgresChunkReader implements SourceChunkReader {
             : schema.primaryKeyTupleFor(schema.primaryKeyRowFromTuple(stopAtPrimaryKey));
     if (normalizedStartAfter != null
         && normalizedStopAt != null
-        && schema.comparePrimaryKeyTuples(normalizedStartAfter, normalizedStopAt) >= 0) {
+        && (normalizedStartAfter.equals(normalizedStopAt)
+            || (schema.canComparePrimaryKeyOrderInMemory()
+                && schema.comparePrimaryKeyTuples(normalizedStartAfter, normalizedStopAt) > 0))) {
       return Optional.empty();
     }
 
@@ -128,49 +131,76 @@ public final class JdbcPostgresChunkReader implements SourceChunkReader {
     }
 
     List<PrimaryKeyTuple> orderedKeys = List.copyOf(dedupedKeys);
+    List<ImmutableRowImage> rowImages = readTargetedRows(connection, schema, orderedKeys);
+    if (rowImages.isEmpty()) {
+      return Optional.empty();
+    }
+    Map<PrimaryKeyTuple, ImmutableRowImage> rowsByPrimaryKey = new LinkedHashMap<>();
+    for (ImmutableRowImage row : rowImages) {
+      PrimaryKeyTuple primaryKeyTuple = primaryKeyTuple(schema, row, "targeted chunk read");
+      ImmutableRowImage previous = rowsByPrimaryKey.put(primaryKeyTuple, row);
+      if (previous != null) {
+        throw new IllegalStateException(
+            "PostgreSQL targeted chunk read returned duplicate primary key "
+                + primaryKeyTuple.literal()
+                + " for "
+                + schema.tableId().displayName());
+      }
+    }
+
+    Map<PrimaryKeyTuple, ImmutableRowImage> selectedByActualPrimaryKey = new LinkedHashMap<>();
+    List<PrimaryKeyTuple> matchedRequestedKeys = new ArrayList<>();
+    PrimaryKeyTuple lastPrimaryKey = null;
+    for (PrimaryKeyTuple requestedKey : orderedKeys) {
+      ImmutableRowImage row = rowsByPrimaryKey.get(requestedKey);
+      if (row == null && !schema.canComparePrimaryKeyOrderInMemory()) {
+        List<ImmutableRowImage> sourceMatchedRows =
+            readTargetedRows(connection, schema, List.of(requestedKey));
+        if (sourceMatchedRows.size() > 1) {
+          throw new IllegalStateException(
+              "PostgreSQL targeted chunk read returned multiple rows for source-equivalent primary key "
+                  + requestedKey.literal()
+                  + " for "
+                  + schema.tableId().displayName());
+        }
+        row = sourceMatchedRows.isEmpty() ? null : sourceMatchedRows.getFirst();
+      }
+      if (row != null) {
+        PrimaryKeyTuple actualPrimaryKey = primaryKeyTuple(schema, row, "targeted chunk read");
+        if (selectedByActualPrimaryKey.putIfAbsent(actualPrimaryKey, row) == null) {
+          lastPrimaryKey = actualPrimaryKey;
+        }
+        matchedRequestedKeys.add(requestedKey);
+      }
+    }
+    if (selectedByActualPrimaryKey.isEmpty()) {
+      return Optional.empty();
+    }
+    return Optional.of(
+        new Chunk(
+            jobId,
+            schema.tableId().displayName(),
+            schema,
+            null,
+            List.copyOf(selectedByActualPrimaryKey.values()),
+            null,
+            lastPrimaryKey,
+            true,
+            matchedRequestedKeys));
+  }
+
+  private List<ImmutableRowImage> readTargetedRows(
+      Connection connection, TableSchema schema, List<PrimaryKeyTuple> primaryKeys)
+      throws SQLException {
     try (PreparedStatement statement =
-        connection.prepareStatement(PostgresSql.targetedPrimaryKeysReadSql(schema, orderedKeys.size()))) {
+        connection.prepareStatement(
+            PostgresSql.targetedPrimaryKeysReadSql(schema, primaryKeys.size()))) {
       int parameterIndex = 1;
-      for (PrimaryKeyTuple orderedKey : orderedKeys) {
-        parameterIndex = bindPrimaryKeyTuple(statement, parameterIndex, schema, orderedKey);
+      for (PrimaryKeyTuple primaryKey : primaryKeys) {
+        parameterIndex = bindPrimaryKeyTuple(statement, parameterIndex, schema, primaryKey);
       }
       try (ResultSet resultSet = statement.executeQuery()) {
-        List<ImmutableRowImage> rowImages = readRowImages(resultSet, schema);
-        Map<PrimaryKeyTuple, ImmutableRowImage> rowsByPrimaryKey = new LinkedHashMap<>();
-        for (ImmutableRowImage row : rowImages) {
-          PrimaryKeyTuple primaryKeyTuple = primaryKeyTuple(schema, row, "targeted chunk read");
-          ImmutableRowImage previous = rowsByPrimaryKey.put(primaryKeyTuple, row);
-          if (previous != null) {
-            throw new IllegalStateException(
-                "PostgreSQL targeted chunk read returned duplicate primary key "
-                    + primaryKeyTuple.literal()
-                    + " for "
-                    + schema.tableId().displayName());
-          }
-        }
-
-        List<ImmutableRowImage> selected = new ArrayList<>();
-        PrimaryKeyTuple lastPrimaryKey = null;
-        for (PrimaryKeyTuple requestedKey : orderedKeys) {
-          ImmutableRowImage row = rowsByPrimaryKey.get(requestedKey);
-          if (row != null) {
-            selected.add(row);
-            lastPrimaryKey = requestedKey;
-          }
-        }
-        if (selected.isEmpty()) {
-          return Optional.empty();
-        }
-        return Optional.of(
-            new Chunk(
-                jobId,
-                schema.tableId().displayName(),
-                schema,
-                null,
-                selected,
-                null,
-                lastPrimaryKey,
-                true));
+        return readRowImages(resultSet, schema);
       }
     }
   }
@@ -185,7 +215,7 @@ public final class JdbcPostgresChunkReader implements SourceChunkReader {
       Object[] values = new Object[selectedColumns.size()];
       for (int index = 0; index < selectedColumns.size(); index++) {
         ColumnDefinition column = selectedColumns.get(index);
-        Object raw = resultSet.getObject(index + 1);
+        Object raw = readColumnValue(resultSet, index + 1, column);
         // Route chunk-origin values through the same normalizer the pgoutput path uses, so the
         // reconcile step and downstream sinks see one consistent shape regardless of capture
         // origin (SELECT vs LOG). A normalization failure indicates the source value cannot be
@@ -233,7 +263,8 @@ public final class JdbcPostgresChunkReader implements SourceChunkReader {
     LinkedHashMap<String, Object> row = new LinkedHashMap<>();
     List<ColumnDefinition> primaryKeyColumns = schema.primaryKeyDefinitions();
     for (int index = 0; index < primaryKeyColumns.size(); index++) {
-      row.put(primaryKeyColumns.get(index).name(), resultSet.getObject(index + 1));
+      ColumnDefinition column = primaryKeyColumns.get(index);
+      row.put(column.name(), readColumnValue(resultSet, index + 1, column));
     }
     return primaryKeyTuple(schema, row, "primary-key read");
   }
@@ -300,6 +331,14 @@ public final class JdbcPostgresChunkReader implements SourceChunkReader {
       return OffsetDateTime.ofInstant(instant, ZoneOffset.UTC);
     }
     return normalizedValue;
+  }
+
+  private static Object readColumnValue(
+      ResultSet resultSet, int columnIndex, ColumnDefinition column) throws SQLException {
+    if (column.isTimeWithTimeZone()) {
+      return resultSet.getObject(columnIndex, OffsetTime.class);
+    }
+    return resultSet.getObject(columnIndex);
   }
 
   private static int queryLimit(int chunkSize) {

@@ -11,6 +11,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
+import java.time.OffsetTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeParseException;
 import java.util.BitSet;
@@ -190,6 +191,9 @@ public final class NeutralValueNormalizer {
     if (value instanceof OffsetDateTime offsetDateTime) {
       return offsetDateTime.toLocalTime();
     }
+    if (value instanceof OffsetTime offsetTime) {
+      return offsetTime.toLocalTime();
+    }
     return parseLocalTime(String.valueOf(value));
   }
 
@@ -236,16 +240,37 @@ public final class NeutralValueNormalizer {
   }
 
   private static LocalTime parseLocalTime(String value) {
+    String trimmed = value.trim();
     try {
-      return LocalTime.parse(value);
-    } catch (DateTimeParseException ignored) {
-      String normalized = normalizeIsoWhitespace(value);
+      return LocalTime.parse(trimmed);
+    } catch (DateTimeParseException localTimeFailure) {
+      try {
+        return OffsetTime.parse(normalizeOffsetSuffix(trimmed)).toLocalTime();
+      } catch (DateTimeParseException ignored) {
+      }
+      String normalized = normalizeIsoWhitespace(trimmed);
       int tIndex = normalized.indexOf('T');
       if (tIndex >= 0 && tIndex + 1 < normalized.length()) {
-        return LocalTime.parse(normalized.substring(tIndex + 1));
+        String timePart = normalized.substring(tIndex + 1);
+        try {
+          return LocalTime.parse(timePart);
+        } catch (DateTimeParseException ignored) {
+          return OffsetTime.parse(normalizeOffsetSuffix(timePart)).toLocalTime();
+        }
       }
-      throw ignored;
+      throw localTimeFailure;
     }
+  }
+
+  private static String normalizeOffsetSuffix(String value) {
+    if (value.matches(".*[+-]\\d{2}$")) {
+      return value + ":00";
+    }
+    if (value.matches(".*[+-]\\d{4}$")) {
+      int offsetStart = value.length() - 5;
+      return value.substring(0, offsetStart + 3) + ":" + value.substring(offsetStart + 3);
+    }
+    return value;
   }
 
   private static String normalizeIsoWhitespace(String text) {

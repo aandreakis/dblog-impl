@@ -1,5 +1,6 @@
 package io.github.aandreakis.dblog.core.schema;
 
+import java.util.Locale;
 import java.util.Objects;
 
 public record ColumnDefinition(
@@ -31,5 +32,15 @@ public record ColumnDefinition(
 
   public boolean supported() {
     return neutralType.isSupported();
+  }
+
+  /** Whether this source type carries a UTC offset that neutral {@code TIME} discards. */
+  public boolean isTimeWithTimeZone() {
+    if (neutralType != NeutralColumnType.TIME) {
+      return false;
+    }
+    String normalized = sourceType.trim().toLowerCase(Locale.ROOT);
+    return "timetz".equals(normalized)
+        || (normalized.startsWith("time") && normalized.contains("with time zone"));
   }
 }

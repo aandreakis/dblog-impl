@@ -89,6 +89,91 @@ class JdbcMySqlChunkReaderIT {
     }
   }
 
+  @Test
+  void resumesStringPrimaryKeyChunksUsingTheSourceCollation() throws Exception {
+    assumeDockerIsAvailable();
+
+    try (MySQLContainer mysql =
+        new MySQLContainer(DockerImageName.parse("mysql:8.4"))
+            .withDatabaseName("appdb")
+            .withUsername("dblog")
+            .withPassword("dblog")
+            .withEnv("MYSQL_ROOT_PASSWORD", "root")) {
+      mysql.start();
+      try (Connection connection =
+              DriverManager.getConnection(mysql.getJdbcUrl(), mysql.getUsername(), mysql.getPassword());
+          Statement statement = connection.createStatement()) {
+        configureSqlConnection(connection);
+        statement.execute(
+            "CREATE TABLE appdb.collated_widgets ("
+                + "id VARCHAR(32) COLLATE utf8mb4_0900_ai_ci PRIMARY KEY, name VARCHAR(255))");
+        statement.execute(
+            "INSERT INTO appdb.collated_widgets (id, name) VALUES "
+                + "('a', 'first'), ('b', 'second'), ('Z', 'last')");
+
+        TableSchema schema =
+            TableSchema.create(
+                new TableId("sourceA", "appdb", "collated_widgets"),
+                List.of(
+                    new ColumnDefinition(
+                        "id", "varchar(32)", NeutralColumnType.STRING, true, false),
+                    new ColumnDefinition(
+                        "name", "varchar(255)", NeutralColumnType.STRING, false, true)),
+                Instant.parse("2026-07-21T00:00:00Z"));
+        JdbcMySqlChunkReader reader = new JdbcMySqlChunkReader();
+
+        var upperBound =
+            reader.tableScanUpperBoundPrimaryKeyTuple(connection, schema).orElseThrow();
+        assertThat(upperBound.literal()).isEqualTo("Z");
+
+        Chunk firstChunk =
+            reader
+                .nextTableChunk(connection, "job-collation", schema, null, upperBound, 1)
+                .orElseThrow();
+        assertThat(firstChunk.rows()).extracting(row -> row.get("id")).containsExactly("a");
+
+        Chunk secondChunk =
+            reader
+                .nextTableChunk(
+                    connection,
+                    "job-collation",
+                    schema,
+                    firstChunk.lastPrimaryKeyTuple(),
+                    upperBound,
+                    1)
+                .orElseThrow();
+        assertThat(secondChunk.rows()).extracting(row -> row.get("id")).containsExactly("b");
+        assertThat(secondChunk.finalChunk()).isFalse();
+
+        Chunk finalChunk =
+            reader
+                .nextTableChunk(
+                    connection,
+                    "job-collation",
+                    schema,
+                    secondChunk.lastPrimaryKeyTuple(),
+                    upperBound,
+                    1)
+                .orElseThrow();
+        assertThat(finalChunk.rows()).extracting(row -> row.get("id")).containsExactly("Z");
+        assertThat(finalChunk.finalChunk()).isTrue();
+
+        Chunk targetedChunk =
+            reader
+                .targetedPrimaryKeyTuples(
+                    connection,
+                    "job-collation-targeted",
+                    schema,
+                    schema.primaryKeyTuplesFromLiterals(List.of("A")))
+                .orElseThrow();
+        assertThat(targetedChunk.rows()).extracting(row -> row.get("id")).containsExactly("a");
+        assertThat(targetedChunk.matchedRequestedPrimaryKeyTuples())
+            .extracting(tuple -> tuple.literal())
+            .containsExactly("A");
+      }
+    }
+  }
+
   private static void configureSqlConnection(Connection connection) throws Exception {
     connection.setAutoCommit(true);
     connection.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);

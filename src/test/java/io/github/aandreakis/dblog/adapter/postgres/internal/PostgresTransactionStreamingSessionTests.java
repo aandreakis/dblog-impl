@@ -1096,6 +1096,42 @@ class PostgresTransactionStreamingSessionTests {
   }
 
   @Test
+  void decodesTimetzTextWithoutChangingItsWallClockComponent() throws Exception {
+    StubStream stream =
+        new StubStream(
+            List.of(
+                relation(
+                    7,
+                    "public",
+                    "timed_values",
+                    'f',
+                    new PostgresPgoutputDecoderTestsHelper.RelationColumnSpec("id", true, 20),
+                    new PostgresPgoutputDecoderTestsHelper.RelationColumnSpec(
+                        "observed_at", false, 1266)),
+                begin("0/16DA010", TX_TIME, 42),
+                insert(7, "1", "10:15:30+02"),
+                commit("0/16DA018", "0/16DA020", TX_TIME)),
+            java.util.Arrays.asList(null, null, null, PostgresLsn.parse("0/16DA020")));
+    try (H2RuntimeStateStore stateStore =
+        new H2RuntimeStateStore(tempDir.resolve("next-pgoutput-timetz"))) {
+      PostgresTransactionStreamingSession session =
+          new PostgresTransactionStreamingSession(
+              "appdb",
+              "test-run",
+              "internal-stream",
+              "postgres-source",
+              List.of(timetzSchema()),
+              stream,
+              new PostgresSourceCheckpointStore(stateStore));
+
+      PostgresPgoutputTransaction transaction = session.readPendingTransaction().orElseThrow();
+
+      assertThat(transaction.events().getFirst().afterRow().asMap())
+          .containsEntry("observed_at", LocalTime.parse("10:15:30"));
+    }
+  }
+
+  @Test
   void skipsUnsupportedNonPrimaryColumnsButPreservesUnsupportedPrimaryKeyTupleValues()
       throws Exception {
     StubStream stream =
@@ -1155,6 +1191,16 @@ class PostgresTransactionStreamingSessionTests {
             new ColumnDefinition("event_time", "time", NeutralColumnType.TIME, false, true),
             new ColumnDefinition("updated_at", "timestamptz", NeutralColumnType.TIMESTAMP, false, true),
             new ColumnDefinition("entity_uuid", "uuid", NeutralColumnType.UUID, false, true)),
+        TX_TIME);
+  }
+
+  private static TableSchema timetzSchema() {
+    return TableSchema.create(
+        new TableId("appdb", "public", "timed_values"),
+        List.of(
+            new ColumnDefinition("id", "bigint", NeutralColumnType.INTEGER, true, false),
+            new ColumnDefinition(
+                "observed_at", "time with time zone", NeutralColumnType.TIME, false, true)),
         TX_TIME);
   }
 

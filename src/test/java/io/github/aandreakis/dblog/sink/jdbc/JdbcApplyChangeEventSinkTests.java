@@ -24,7 +24,6 @@ import java.sql.Connection;
 import java.sql.Date;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
-import java.sql.Time;
 import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
@@ -387,7 +386,7 @@ class JdbcApplyChangeEventSinkTests {
   }
 
   @Test
-  void bindsTemporalSetterPathsForMysqlTargetsWithoutSetObjectFallback() throws Exception {
+  void bindsFractionalTimeThroughTheJdbc42LocalTimePath() throws Exception {
     Connection connection = mockBatchCapableConnection();
     PreparedStatement statement = mock(PreparedStatement.class);
     when(connection.getAutoCommit()).thenReturn(true);
@@ -410,7 +409,7 @@ class JdbcApplyChangeEventSinkTests {
     LinkedHashMap<String, Object> afterRow = new LinkedHashMap<>();
     afterRow.put("id", 1L);
     LocalDate dateValue = LocalDate.parse("2026-03-29");
-    LocalTime timeValue = LocalTime.parse("12:34:56");
+    LocalTime timeValue = LocalTime.parse("12:34:56.789012");
     LocalDateTime timestampValue = LocalDateTime.parse("2026-03-29T12:34:56");
     afterRow.put("event_date", dateValue);
     afterRow.put("event_time", timeValue);
@@ -439,7 +438,7 @@ class JdbcApplyChangeEventSinkTests {
     }
 
     verify(statement).setDate(2, Date.valueOf(dateValue));
-    verify(statement).setTime(3, Time.valueOf(timeValue));
+    verify(statement).setObject(3, timeValue);
     verify(statement).setTimestamp(4, Timestamp.valueOf(timestampValue));
   }
 
@@ -538,6 +537,54 @@ class JdbcApplyChangeEventSinkTests {
           .isInstanceOf(IllegalStateException.class)
           .hasMessageContaining("primary key does not match");
     }
+  }
+
+  @Test
+  void acceptsEqualBinaryPrimaryKeyContentFromDistinctArrays() throws Exception {
+    Connection connection = mockBatchCapableConnection();
+    PreparedStatement statement = mock(PreparedStatement.class);
+    when(connection.getAutoCommit()).thenReturn(true);
+    when(statement.getConnection()).thenReturn(connection);
+    when(connection.prepareStatement(anyString())).thenReturn(statement);
+    when(statement.executeBatch()).thenReturn(new int[] {1});
+
+    TableId tableId = new TableId("source", "demo", "binary_accounts");
+    JdbcApplyTargetSchemaInspector.TargetTableMetadata metadata =
+        new JdbcApplyTargetSchemaInspector.TargetTableMetadata(
+            tableId,
+            List.of(
+                targetColumn("id", "bytea", NeutralColumnType.BINARY, true, 1),
+                targetColumn("name", "text", NeutralColumnType.STRING, false, 0)));
+    LinkedHashMap<String, Object> primaryKey = new LinkedHashMap<>();
+    primaryKey.put("id", new byte[] {0x01, 0x02});
+    LinkedHashMap<String, Object> afterRow = new LinkedHashMap<>();
+    afterRow.put("id", new byte[] {0x01, 0x02});
+    afterRow.put("name", "alice");
+    ChangeEvent event =
+        ChangeEventTestFixtures.fromRowMaps(
+            tableId,
+            OperationType.UPDATE,
+            CaptureOrigin.LOG,
+            primaryKey,
+            null,
+            afterRow,
+            new OpaqueSourcePosition("pos:binary-1"),
+            "tx-binary-1",
+            null);
+
+    try (JdbcApplyChangeEventSink sink =
+        new JdbcApplyChangeEventSink(
+            JdbcApplyTargetDialect.POSTGRES,
+            "org.h2.Driver",
+            "jdbc:h2:mem:binary-primary-key",
+            () -> connection,
+            TargetTableResolver.identity(),
+            staticTargetSchema(metadata))) {
+      sink.appendEvents(List.of(event));
+    }
+
+    verify(statement).addBatch();
+    verify(statement).executeBatch();
   }
 
   @Test

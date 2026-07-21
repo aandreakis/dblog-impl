@@ -419,9 +419,16 @@ public final class DefaultDumpWindowCoordinator<TX extends SourceTransaction<?>>
     if (progress.lastCompletedPrimaryKeyTuple() == null) {
       return false;
     }
-    return schema.comparePrimaryKeyTuples(
-            progress.lastCompletedPrimaryKeyTuple(), progress.requestUpperBoundPrimaryKeyTuple())
-        >= 0;
+    if (progress
+        .lastCompletedPrimaryKeyTuple()
+        .equals(progress.requestUpperBoundPrimaryKeyTuple())) {
+      return true;
+    }
+    return schema.canComparePrimaryKeyOrderInMemory()
+        && schema.comparePrimaryKeyTuples(
+                progress.lastCompletedPrimaryKeyTuple(),
+                progress.requestUpperBoundPrimaryKeyTuple())
+            > 0;
   }
 
   private record LoadedDumpProgress(DumpTableProgress progress, boolean persisted) {}

@@ -8,6 +8,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
+import java.time.OffsetTime;
 import java.time.ZonedDateTime;
 import java.util.Arrays;
 import java.util.Date;
@@ -277,8 +278,11 @@ public final class PrimaryKeyValue implements Comparable<PrimaryKeyValue> {
     if (rawValue instanceof java.sql.Time value) {
       return value.toLocalTime();
     }
+    if (rawValue instanceof OffsetTime value) {
+      return value.toLocalTime();
+    }
     if (rawValue instanceof String value) {
-      return LocalTime.parse(value);
+      return NeutralValueNormalizer.normalizeTimeValue(value);
     }
     throw new IllegalArgumentException(
         "unsupported time primary key value: " + rawValue.getClass().getName());

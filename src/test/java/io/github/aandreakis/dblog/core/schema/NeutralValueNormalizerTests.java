@@ -12,6 +12,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
+import java.time.OffsetTime;
 import java.time.ZoneOffset;
 import java.util.UUID;
 import java.util.stream.Stream;
@@ -323,7 +324,11 @@ class NeutralValueNormalizerTests {
     return Stream.of(
         Arguments.of(reference, reference),
         Arguments.of(java.sql.Time.valueOf(reference), reference),
+        Arguments.of(OffsetTime.of(reference, ZoneOffset.ofHours(2)), reference),
         Arguments.of("10:15:30", reference),
+        Arguments.of("10:15:30+02", reference),
+        Arguments.of("10:15:30+0200", reference),
+        Arguments.of("10:15:30+02:00", reference),
         // Time extracted from ISO datetime strings with either 'T' or space separators.
         Arguments.of("2026-04-12T10:15:30", reference),
         Arguments.of("2026-04-12 10:15:30", reference));

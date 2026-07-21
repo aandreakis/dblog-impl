@@ -20,7 +20,8 @@ public record Chunk(
     List<ImmutableRowImage> rowImages,
     List<PrimaryKeyHash> rowPrimaryKeyHashes,
     PrimaryKeyTuple lastPrimaryKeyTuple,
-    boolean finalChunk) {
+    boolean finalChunk,
+    List<PrimaryKeyTuple> matchedRequestedPrimaryKeyTuples) {
 
   public Chunk {
     Objects.requireNonNull(jobId, "jobId");
@@ -34,6 +35,31 @@ public record Chunk(
     if (rowImages.size() != rowPrimaryKeyHashes.size()) {
       throw new IllegalArgumentException("rowImages and rowPrimaryKeyHashes must have the same size");
     }
+    matchedRequestedPrimaryKeyTuples =
+        matchedRequestedPrimaryKeyTuples == null
+            ? List.of()
+            : List.copyOf(matchedRequestedPrimaryKeyTuples);
+  }
+
+  public Chunk(
+      String jobId,
+      String tableName,
+      TableSchema schema,
+      PrimaryKeyTuple startAfterPrimaryKeyTuple,
+      List<ImmutableRowImage> rowImages,
+      List<PrimaryKeyHash> rowPrimaryKeyHashes,
+      PrimaryKeyTuple lastPrimaryKeyTuple,
+      boolean finalChunk) {
+    this(
+        jobId,
+        tableName,
+        schema,
+        startAfterPrimaryKeyTuple,
+        rowImages,
+        rowPrimaryKeyHashes,
+        lastPrimaryKeyTuple,
+        finalChunk,
+        List.of());
   }
 
   /**
@@ -152,7 +178,8 @@ public record Chunk(
         rowImages,
         null,
         lastPrimaryKeyTuple,
-        finalChunk);
+        finalChunk,
+        matchedRequestedPrimaryKeyTuples);
   }
 
   public String startAfterPrimaryKey() {

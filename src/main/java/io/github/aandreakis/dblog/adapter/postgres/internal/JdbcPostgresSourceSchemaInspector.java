@@ -62,7 +62,9 @@ public final class JdbcPostgresSourceSchemaInspector {
         if (columns.isEmpty()) {
           return null;
         }
-        return TableSchema.create(tableId, columns, Instant.now());
+        TableSchema schema = TableSchema.create(tableId, columns, Instant.now());
+        PostgresPrimaryKeyPolicy.requireSupportedForCapture(schema);
+        return schema;
       }
     }
   }

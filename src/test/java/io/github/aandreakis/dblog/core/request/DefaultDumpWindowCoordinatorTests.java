@@ -307,6 +307,84 @@ class DefaultDumpWindowCoordinatorTests {
   }
 
   @Test
+  void continuesTextKeyDumpWhenSourceCollationDiffersFromJavaOrdering() throws Exception {
+    TableSchema schema = collatedTextKeySchema();
+    WatermarkWindow firstWindow =
+        new WatermarkWindow(new WatermarkToken("lw-first"), new WatermarkToken("hw-first"));
+    Chunk firstChunk =
+        Chunk.fromMapRows(
+            "job-collation",
+            schema.tableId().displayName(),
+            schema,
+            null,
+            List.of(Map.of("id", "a", "name", "first")),
+            "a",
+            false);
+    DumpTableProgress persistedProgress =
+        DumpTableProgress.initial(
+                "job-collation", schema.tableId().displayName(), schema.fingerprint())
+            .captureRequestUpperBound(schema, "Z")
+            .beginChunk(firstChunk, firstWindow)
+            .completeChunk(firstChunk);
+
+    WatermarkWindow secondWindow =
+        new WatermarkWindow(new WatermarkToken("lw-second"), new WatermarkToken("hw-second"));
+    Chunk secondChunk =
+        Chunk.fromMapRows(
+            "job-collation",
+            schema.tableId().displayName(),
+            schema,
+            "a",
+            List.of(Map.of("id", "b", "name", "second")),
+            "b",
+            false);
+    TestTransaction transaction =
+        new TestTransaction(
+            "tx-second",
+            new ComparablePosition(2),
+            List.of(
+                watermark(schema.tableId(), "lw-second"),
+                watermark(schema.tableId(), "hw-second")));
+    FakeRuntime runtime =
+        new FakeRuntime(secondWindow, List.of(), Optional.of(secondChunk), List.of(transaction));
+
+    try (H2RuntimeStateStore stateStore =
+        new H2RuntimeStateStore(tempDir.resolve("collated-text-key-state"))) {
+      stateStore.dumpProgress().save(persistedProgress);
+      DefaultDumpWindowCoordinator<TestTransaction> coordinator =
+          new DefaultDumpWindowCoordinator<>(
+              "MySQL",
+              "transaction",
+              runtime,
+              stateStore.dumpProgress(),
+              stateStore.schemas(),
+              new FakeChunkReader(secondChunk, Optional.of("Z")),
+              new WindowReconciler(NoopTap.INSTANCE),
+              Duration.ofSeconds(1),
+              Duration.ofMillis(1),
+              NoopTap.INSTANCE);
+
+      DumpWindowBatch<TestTransaction> batch =
+          (DumpWindowBatch<TestTransaction>)
+              coordinator
+                  .coordinateNextTableChunk("job-collation", schema, 1)
+                  .orElseThrow();
+      coordinator.acknowledgeCompletedBatch(batch);
+
+      assertThat(batch.chunk().rows())
+          .extracting(row -> row.get("id"))
+          .containsExactly("b");
+      assertThat(
+              stateStore
+                  .dumpProgress()
+                  .load("job-collation", schema.tableId().displayName())
+                  .orElseThrow()
+                  .lastCompletedPrimaryKey())
+          .isEqualTo("b");
+    }
+  }
+
+  @Test
   void emptyChunkDrainMustNotSilentlyEatLiveTransactions() throws Exception {
     // Bug repro: the empty-chunk fast path opens LW/HW, sees a zero-row chunk, then "drains to
     // HW" by repeatedly calling readPendingTransaction() and discarding whatever is not the
@@ -473,11 +551,101 @@ class DefaultDumpWindowCoordinatorTests {
     }
   }
 
+  @Test
+  void collatedTextDumpCompletesAtMissingCapturedUpperBoundAfterEmptyDrain()
+      throws Exception {
+    TableSchema schema = collatedTextKeySchema();
+    Chunk firstChunk =
+        Chunk.fromMapRows(
+            "job-collation-missing-upper",
+            schema.tableId().displayName(),
+            schema,
+            null,
+            List.of(Map.of("id", "a", "name", "first")),
+            "a",
+            false);
+    DumpTableProgress persistedProgress =
+        DumpTableProgress.initial(
+                "job-collation-missing-upper",
+                schema.tableId().displayName(),
+                schema.fingerprint())
+            .captureRequestUpperBound(schema, "Z")
+            .beginChunk(
+                firstChunk,
+                new WatermarkWindow(
+                    new WatermarkToken("lw-first"), new WatermarkToken("hw-first")))
+            .completeChunk(firstChunk);
+
+    WatermarkWindow drainWindow =
+        new WatermarkWindow(new WatermarkToken("lw-drain"), new WatermarkToken("hw-drain"));
+    TestTransaction lowWatermark =
+        new TestTransaction(
+            "tx-lw", new ComparablePosition(40), List.of(watermark(schema.tableId(), "lw-drain")));
+    TestTransaction highWatermark =
+        new TestTransaction(
+            "tx-hw", new ComparablePosition(42), List.of(watermark(schema.tableId(), "hw-drain")));
+    FakeRuntime runtime =
+        new FakeRuntime(
+            drainWindow,
+            List.of(),
+            Optional.empty(),
+            List.of(lowWatermark, highWatermark));
+
+    try (H2RuntimeStateStore stateStore =
+        new H2RuntimeStateStore(tempDir.resolve("collated-missing-upper-bound-state"))) {
+      stateStore.dumpProgress().save(persistedProgress);
+      DefaultDumpWindowCoordinator<TestTransaction> coordinator =
+          new DefaultDumpWindowCoordinator<>(
+              "MySQL",
+              "transaction",
+              runtime,
+              stateStore.dumpProgress(),
+              stateStore.schemas(),
+              new FakeChunkReader(null, Optional.of("Z")),
+              new WindowReconciler(NoopTap.INSTANCE),
+              Duration.ofSeconds(1),
+              Duration.ofMillis(1),
+              NoopTap.INSTANCE);
+
+      DumpWindowDrainBatch<TestTransaction> drain =
+          (DumpWindowDrainBatch<TestTransaction>)
+              coordinator
+                  .coordinateNextTableChunk("job-collation-missing-upper", schema, 1)
+                  .orElseThrow();
+      coordinator.acknowledgeCompletedBatch(drain);
+
+      DumpTableProgress completed =
+          stateStore
+              .dumpProgress()
+              .load("job-collation-missing-upper", schema.tableId().displayName())
+              .orElseThrow();
+      assertThat(completed.lastCompletedPrimaryKey()).isEqualTo("Z");
+      assertThat(runtime.windowOpenCount).isEqualTo(1);
+
+      assertThat(
+              coordinator.coordinateNextTableChunk(
+                  "job-collation-missing-upper", schema, 1))
+          .isEmpty();
+      assertThat(runtime.windowOpenCount)
+          .as("completed collated dump must not reopen a watermark window")
+          .isEqualTo(1);
+    }
+  }
+
   private static TableSchema schema() {
     return TableSchema.create(
         new TableId("source", "appdb", "widgets"),
         List.of(
             new ColumnDefinition("id", "bigint", NeutralColumnType.INTEGER, true, false),
+            new ColumnDefinition("name", "varchar(255)", NeutralColumnType.STRING, false, true)),
+        Instant.parse("2026-04-10T00:00:00Z"));
+  }
+
+  private static TableSchema collatedTextKeySchema() {
+    return TableSchema.create(
+        new TableId("source", "appdb", "collated_widgets"),
+        List.of(
+            new ColumnDefinition("id", "varchar(32)", NeutralColumnType.STRING, true, false),
             new ColumnDefinition("name", "varchar(255)", NeutralColumnType.STRING, false, true)),
         Instant.parse("2026-04-10T00:00:00Z"));
   }
@@ -537,6 +705,7 @@ class DefaultDumpWindowCoordinatorTests {
     private final Optional<Chunk> windowChunk;
     private final Deque<TestTransaction> transactions;
     private final java.util.List<TestTransaction> acknowledged = new java.util.ArrayList<>();
+    private int windowOpenCount;
 
     private FakeRuntime(
         WatermarkWindow window,
@@ -559,6 +728,7 @@ class DefaultDumpWindowCoordinatorTests {
     @Override
     public <T> WatermarkWindowResult<T> executeChunkReadInWatermarkWindow(
         SourceChunkReader reader, ChunkReadWithWindowWork<T> work) {
+      windowOpenCount++;
       @SuppressWarnings("unchecked")
       T value = (T) windowChunk;
       return new WatermarkWindowResult<>(value, window);

@@ -161,12 +161,12 @@ public final class ImmutableRowImage {
     if (!(other instanceof ImmutableRowImage that)) {
       return false;
     }
-    return columnNames.equals(that.columnNames) && Arrays.equals(values, that.values);
+    return columnNames.equals(that.columnNames) && Arrays.deepEquals(values, that.values);
   }
 
   @Override
   public int hashCode() {
-    return 31 * columnNames.hashCode() + Arrays.hashCode(values);
+    return 31 * columnNames.hashCode() + Arrays.deepHashCode(values);
   }
 
   @Override

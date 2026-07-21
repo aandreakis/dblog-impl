@@ -72,6 +72,10 @@ public final class PostgresTransactionStreamingSession
   private TransactionBuffer currentTransaction;
   private boolean ownHeartbeatObserved;
 
+  /**
+   * If construction throws, ownership of {@code stream} remains with the caller, who must close
+   * it.
+   */
   public PostgresTransactionStreamingSession(
       String databaseName,
       String currentRunId,
@@ -87,6 +91,7 @@ public final class PostgresTransactionStreamingSession
     this.schemasByTableId = new HashMap<>(indexSchemas(capturedSchemas));
     this.stream = Objects.requireNonNull(stream, "stream");
     this.checkpointStore = Objects.requireNonNull(checkpointStore, "checkpointStore");
+    PostgresPrimaryKeyPolicy.requireSupportedForCapture(capturedSchemas);
   }
 
   @Override

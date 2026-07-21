@@ -255,6 +255,103 @@ class RuntimeStateDumpRequestCoordinatorTests {
     }
   }
 
+  @Test
+  void failsTableRequestClosedWhenTimetzPrimaryKeyCannotPreserveIdentity() throws Exception {
+    TableSchema timetzPrimaryKeySchema =
+        TableSchema.create(
+            new TableId("source", "public", "timed_widgets"),
+            List.of(
+                new ColumnDefinition(
+                    "observed_at", "time with time zone", NeutralColumnType.TIME, true, false),
+                new ColumnDefinition("name", "text", NeutralColumnType.STRING, false, true)),
+            Instant.parse("2026-07-21T00:00:00Z"));
+    DumpRequest request =
+        new DumpRequest(
+            "pk-timetz-unsupported",
+            DumpScope.TABLE,
+            timetzPrimaryKeySchema.tableId(),
+            List.of());
+
+    try (H2RuntimeStateStore stateStore =
+        new H2RuntimeStateStore(tempDir.resolve("coordinator-pk-timetz-unsupported"))) {
+      stateStore.dumpRequests().upsert(request);
+      RuntimeStateDumpRequestCoordinator<TestTransaction> coordinator =
+          new RuntimeStateDumpRequestCoordinator<>(
+              "PostgreSQL",
+              "sourceA",
+              stateStore.dumpRequests(),
+              stateStore.schemas(),
+              new FakeDumpWindowCoordinator(null),
+              new FakeTargetedRepairCoordinator(),
+              () -> List.of(timetzPrimaryKeySchema),
+              100,
+              io.github.aandreakis.dblog.tap.NoopTap.INSTANCE);
+
+      assertThat(coordinator.coordinateNextBatch()).isEmpty();
+
+      DumpRequestStatus status =
+          stateStore.dumpRequests().loadStatus("pk-timetz-unsupported").orElseThrow();
+      assertThat(status.state()).isEqualTo(DumpRequestState.FAILED);
+      assertThat(stateStore.schemas().loadFullDumpRequiredSignals())
+          .anySatisfy(
+              signal -> {
+                assertThat(signal.sourceId()).isEqualTo("sourceA");
+                assertThat(signal.tableId()).isEqualTo(timetzPrimaryKeySchema.tableId());
+              });
+    }
+  }
+
+  @Test
+  void failsPrimaryKeysRequestClosedWhenTimetzPrimaryKeyCannotPreserveIdentity()
+      throws Exception {
+    TableSchema timetzPrimaryKeySchema =
+        TableSchema.create(
+            new TableId("source", "public", "timed_widgets"),
+            List.of(
+                new ColumnDefinition(
+                    "observed_at", "time with time zone", NeutralColumnType.TIME, true, false),
+                new ColumnDefinition("name", "text", NeutralColumnType.STRING, false, true)),
+            Instant.parse("2026-07-21T00:00:00Z"));
+    DumpRequest request =
+        DumpRequest.fromPrimaryKeyLiterals(
+            "pk-repair-timetz-unsupported",
+            DumpScope.PRIMARY_KEYS,
+            timetzPrimaryKeySchema.tableId(),
+            timetzPrimaryKeySchema,
+            List.of("10:00:00+02"));
+
+    try (H2RuntimeStateStore stateStore =
+        new H2RuntimeStateStore(tempDir.resolve("coordinator-pk-repair-timetz-unsupported"))) {
+      stateStore.dumpRequests().upsert(request);
+      FakeTargetedRepairCoordinator targetedRepairCoordinator =
+          new FakeTargetedRepairCoordinator();
+      RuntimeStateDumpRequestCoordinator<TestTransaction> coordinator =
+          new RuntimeStateDumpRequestCoordinator<>(
+              "PostgreSQL",
+              "sourceA",
+              stateStore.dumpRequests(),
+              stateStore.schemas(),
+              new FakeDumpWindowCoordinator(null),
+              targetedRepairCoordinator,
+              () -> List.of(timetzPrimaryKeySchema),
+              100,
+              io.github.aandreakis.dblog.tap.NoopTap.INSTANCE);
+
+      assertThat(coordinator.coordinateNextBatch()).isEmpty();
+
+      DumpRequestStatus status =
+          stateStore.dumpRequests().loadStatus(request.requestId()).orElseThrow();
+      assertThat(status.state()).isEqualTo(DumpRequestState.FAILED);
+      assertThat(targetedRepairCoordinator.coordinateCallCount).isZero();
+      assertThat(stateStore.schemas().loadFullDumpRequiredSignals())
+          .anySatisfy(
+              signal -> {
+                assertThat(signal.sourceId()).isEqualTo("sourceA");
+                assertThat(signal.tableId()).isEqualTo(timetzPrimaryKeySchema.tableId());
+              });
+    }
+  }
+
   /**
    * Same contract for ALL_TABLES: if any captured table has an unsupported PK type, the whole
    * ALL_TABLES request fails closed.
@@ -295,11 +392,9 @@ class RuntimeStateDumpRequestCoordinatorTests {
     }
   }
 
-  // Note: the PRIMARY_KEYS scope is gated *earlier* than the coordinator — DumpRequest's literal
-  // parsing rejects unsupported PK types at request-construction time via
-  // TableSchema.primaryKeyTuplesFromLiterals. A PRIMARY_KEYS request cannot reach the coordinator
-  // with unsupported-PK literals; covered implicitly by PrimaryKeyValueTests. The TABLE and
-  // ALL_TABLES tests above are the in-scope coverage for the coordinator's own gate.
+  // Neutral types such as JSON are gated earlier because literal parsing rejects them. A
+  // source-specific lossy shape such as TIMETZ still parses as neutral TIME, so the coordinator's
+  // shared contract gate rejects it for TABLE, PRIMARY_KEYS, and ALL_TABLES requests.
 
   /**
    * The coordinator's COMPLETED transition prunes prior terminal-state requests for the same
@@ -459,6 +554,7 @@ class RuntimeStateDumpRequestCoordinatorTests {
       implements TargetedRepairCoordinator<TestTransaction> {
     private final TargetedRepairOutcome<TestTransaction> outcome;
     int acknowledgeCallCount;
+    int coordinateCallCount;
 
     private FakeTargetedRepairCoordinator() {
       this(null);
@@ -470,6 +566,7 @@ class RuntimeStateDumpRequestCoordinatorTests {
 
     @Override
     public TargetedRepairResult<TestTransaction> coordinate(DumpRequest request, TableSchema schema) {
+      coordinateCallCount++;
       return new TargetedRepairResult<>(
           Optional.ofNullable(outcome),
           outcome == null ? List.of() : outcome.missingPrimaryKeyTuples());

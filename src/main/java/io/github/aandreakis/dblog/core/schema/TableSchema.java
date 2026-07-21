@@ -164,10 +164,8 @@ public record TableSchema(
   public PrimaryKeyHash primaryKeyHashFor(ImmutableRowImage row) {
     Objects.requireNonNull(row, "row");
     List<ColumnDefinition> primaryKeyDefinitions = primaryKeyDefinitions();
-    for (ColumnDefinition definition : primaryKeyDefinitions) {
-      if (!PrimaryKeyValue.isSupportedPrimaryKeyType(definition.neutralType())) {
-        return null;
-      }
+    if (!supportsDumpPrimaryKeyContract()) {
+      return null;
     }
     Object[] normalized = new Object[primaryKeyDefinitions.size()];
     for (int index = 0; index < primaryKeyDefinitions.size(); index++) {
@@ -340,6 +338,34 @@ public record TableSchema(
 
   public int comparePrimaryKeyTuples(PrimaryKeyTuple left, PrimaryKeyTuple right) {
     return normalizePrimaryKeyTuple(left).compareTo(normalizePrimaryKeyTuple(right));
+  }
+
+  /**
+   * Whether every primary-key column preserves both source identity and the ordering required by
+   * dump and targeted-repair coordination. Offset-bearing {@code TIME} is deliberately excluded:
+   * the neutral representation is {@link java.time.LocalTime}, so retaining it as a key would
+   * collapse distinct source values after their offsets are discarded.
+   */
+  public boolean supportsDumpPrimaryKeyContract() {
+    return primaryKeyDefinitions().stream()
+        .allMatch(
+            definition ->
+                PrimaryKeyValue.isSupportedPrimaryKeyType(definition.neutralType())
+                    && !definition.isTimeWithTimeZone());
+  }
+
+  /**
+   * Whether the neutral primary-key comparator can safely stand in for source ordering.
+   * Text ordering is source-defined by collation, and enum ordering can be declaration-defined,
+   * so range exhaustion and boundary checks for those types must be left to source SQL.
+   */
+  public boolean canComparePrimaryKeyOrderInMemory() {
+    return supportsDumpPrimaryKeyContract()
+        && primaryKeyDefinitions().stream()
+            .noneMatch(
+                definition ->
+                    definition.neutralType() == NeutralColumnType.STRING
+                        || definition.neutralType() == NeutralColumnType.ENUM_STRING);
   }
 
   public int comparePrimaryKeyLiterals(String left, String right) {

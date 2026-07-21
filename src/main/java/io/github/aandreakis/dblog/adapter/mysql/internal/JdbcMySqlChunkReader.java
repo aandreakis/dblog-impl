@@ -73,7 +73,9 @@ public final class JdbcMySqlChunkReader implements SourceChunkReader {
             : schema.primaryKeyTupleFor(schema.primaryKeyRowFromTuple(stopAtPrimaryKey));
     if (normalizedStartAfter != null
         && normalizedStopAt != null
-        && schema.comparePrimaryKeyTuples(normalizedStartAfter, normalizedStopAt) >= 0) {
+        && (normalizedStartAfter.equals(normalizedStopAt)
+            || (schema.canComparePrimaryKeyOrderInMemory()
+                && schema.comparePrimaryKeyTuples(normalizedStartAfter, normalizedStopAt) > 0))) {
       return Optional.empty();
     }
 
@@ -133,49 +135,75 @@ public final class JdbcMySqlChunkReader implements SourceChunkReader {
     }
 
     List<PrimaryKeyTuple> orderedKeys = List.copyOf(dedupedKeys);
+    List<ImmutableRowImage> rowImages = readTargetedRows(connection, schema, orderedKeys);
+    if (rowImages.isEmpty()) {
+      return Optional.empty();
+    }
+    Map<PrimaryKeyTuple, ImmutableRowImage> rowsByPrimaryKey = new LinkedHashMap<>();
+    for (ImmutableRowImage row : rowImages) {
+      PrimaryKeyTuple primaryKeyTuple = primaryKeyTuple(schema, row, "targeted chunk read");
+      ImmutableRowImage previous = rowsByPrimaryKey.put(primaryKeyTuple, row);
+      if (previous != null) {
+        throw new IllegalStateException(
+            "MySQL targeted chunk read returned duplicate primary key "
+                + primaryKeyTuple.literal()
+                + " for "
+                + schema.tableId().displayName());
+      }
+    }
+
+    Map<PrimaryKeyTuple, ImmutableRowImage> selectedByActualPrimaryKey = new LinkedHashMap<>();
+    List<PrimaryKeyTuple> matchedRequestedKeys = new ArrayList<>();
+    PrimaryKeyTuple lastPrimaryKey = null;
+    for (PrimaryKeyTuple requestedKey : orderedKeys) {
+      ImmutableRowImage row = rowsByPrimaryKey.get(requestedKey);
+      if (row == null && !schema.canComparePrimaryKeyOrderInMemory()) {
+        List<ImmutableRowImage> sourceMatchedRows =
+            readTargetedRows(connection, schema, List.of(requestedKey));
+        if (sourceMatchedRows.size() > 1) {
+          throw new IllegalStateException(
+              "MySQL targeted chunk read returned multiple rows for source-equivalent primary key "
+                  + requestedKey.literal()
+                  + " for "
+                  + schema.tableId().displayName());
+        }
+        row = sourceMatchedRows.isEmpty() ? null : sourceMatchedRows.getFirst();
+      }
+      if (row != null) {
+        PrimaryKeyTuple actualPrimaryKey = primaryKeyTuple(schema, row, "targeted chunk read");
+        if (selectedByActualPrimaryKey.putIfAbsent(actualPrimaryKey, row) == null) {
+          lastPrimaryKey = actualPrimaryKey;
+        }
+        matchedRequestedKeys.add(requestedKey);
+      }
+    }
+    if (selectedByActualPrimaryKey.isEmpty()) {
+      return Optional.empty();
+    }
+    return Optional.of(
+        new Chunk(
+            jobId,
+            schema.tableId().displayName(),
+            schema,
+            null,
+            List.copyOf(selectedByActualPrimaryKey.values()),
+            null,
+            lastPrimaryKey,
+            true,
+            matchedRequestedKeys));
+  }
+
+  private List<ImmutableRowImage> readTargetedRows(
+      Connection connection, TableSchema schema, List<PrimaryKeyTuple> primaryKeys)
+      throws SQLException {
     try (PreparedStatement statement =
-        connection.prepareStatement(MySqlSql.targetedPrimaryKeysReadSql(schema, orderedKeys.size()))) {
+        connection.prepareStatement(MySqlSql.targetedPrimaryKeysReadSql(schema, primaryKeys.size()))) {
       int parameterIndex = 1;
-      for (PrimaryKeyTuple orderedKey : orderedKeys) {
-        parameterIndex = bindPrimaryKeyTuple(statement, parameterIndex, schema, orderedKey);
+      for (PrimaryKeyTuple primaryKey : primaryKeys) {
+        parameterIndex = bindPrimaryKeyTuple(statement, parameterIndex, schema, primaryKey);
       }
       try (ResultSet resultSet = statement.executeQuery()) {
-        List<ImmutableRowImage> rowImages = readRowImages(resultSet, schema);
-        Map<PrimaryKeyTuple, ImmutableRowImage> rowsByPrimaryKey = new LinkedHashMap<>();
-        for (ImmutableRowImage row : rowImages) {
-          PrimaryKeyTuple primaryKeyTuple = primaryKeyTuple(schema, row, "targeted chunk read");
-          ImmutableRowImage previous = rowsByPrimaryKey.put(primaryKeyTuple, row);
-          if (previous != null) {
-            throw new IllegalStateException(
-                "MySQL targeted chunk read returned duplicate primary key "
-                    + primaryKeyTuple.literal()
-                    + " for "
-                    + schema.tableId().displayName());
-          }
-        }
-
-        List<ImmutableRowImage> selected = new ArrayList<>();
-        PrimaryKeyTuple lastPrimaryKey = null;
-        for (PrimaryKeyTuple requestedKey : orderedKeys) {
-          ImmutableRowImage row = rowsByPrimaryKey.get(requestedKey);
-          if (row != null) {
-            selected.add(row);
-            lastPrimaryKey = requestedKey;
-          }
-        }
-        if (selected.isEmpty()) {
-          return Optional.empty();
-        }
-        return Optional.of(
-            new Chunk(
-                jobId,
-                schema.tableId().displayName(),
-                schema,
-                null,
-                selected,
-                null,
-                lastPrimaryKey,
-                true));
+        return readRowImages(resultSet, schema);
       }
     }
   }

@@ -3,7 +3,6 @@ package io.github.aandreakis.dblog.core.request;
 import io.github.aandreakis.dblog.adapter.api.SourceTransaction;
 import io.github.aandreakis.dblog.core.model.TableId;
 import io.github.aandreakis.dblog.core.schema.FullDumpRequiredSignal;
-import io.github.aandreakis.dblog.core.schema.PrimaryKeyValue;
 import io.github.aandreakis.dblog.core.schema.SchemaDriftException;
 import io.github.aandreakis.dblog.core.schema.TableSchema;
 import io.github.aandreakis.dblog.state.api.DumpRequestRepository;
@@ -378,12 +377,7 @@ public final class RuntimeStateDumpRequestCoordinator<TX extends SourceTransacti
   }
 
   private static boolean supportsCurrentDumpContract(TableSchema schema) {
-    for (var primaryKeyDefinition : schema.primaryKeyDefinitions()) {
-      if (!PrimaryKeyValue.isSupportedPrimaryKeyType(primaryKeyDefinition.neutralType())) {
-        return false;
-      }
-    }
-    return true;
+    return schema.supportsDumpPrimaryKeyContract();
   }
 
   /**

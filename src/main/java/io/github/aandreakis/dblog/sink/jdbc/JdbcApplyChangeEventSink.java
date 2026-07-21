@@ -16,7 +16,6 @@ import java.sql.Connection;
 import java.sql.Date;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
-import java.sql.Time;
 import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
@@ -422,7 +421,8 @@ public final class JdbcApplyChangeEventSink implements ChangeEventSink, SinkSche
       String columnName = afterRowImage.columnNames().get(index);
       int primaryKeyIndex = primaryKeyImage.indexOf(columnName);
       if (primaryKeyIndex >= 0) {
-        if (!Objects.equals(primaryKeyImage.valueAt(primaryKeyIndex), afterRowImage.valueAt(index))) {
+        if (!Objects.deepEquals(
+            primaryKeyImage.valueAt(primaryKeyIndex), afterRowImage.valueAt(index))) {
           throw new IllegalStateException(
               "Event afterRow primary key does not match event.primaryKey for "
                   + event.tableId().displayName());
@@ -629,7 +629,7 @@ public final class JdbcApplyChangeEventSink implements ChangeEventSink, SinkSche
       return;
     }
     if (coercedValue instanceof LocalTime localTime) {
-      statement.setTime(parameterIndex, Time.valueOf(localTime));
+      statement.setObject(parameterIndex, localTime);
       return;
     }
     if (coercedValue instanceof LocalDateTime localDateTime) {

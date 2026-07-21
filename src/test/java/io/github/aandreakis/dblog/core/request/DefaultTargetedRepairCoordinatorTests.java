@@ -94,6 +94,68 @@ class DefaultTargetedRepairCoordinatorTests {
   }
 
   @Test
+  void trustsSourceMatchedRequestedKeysWhenCollationChangesReturnedLiteral() throws Exception {
+    TableSchema schema =
+        TableSchema.create(
+            new TableId("source", "appdb", "collated_widgets"),
+            List.of(
+                new ColumnDefinition(
+                    "id", "varchar(32)", NeutralColumnType.STRING, true, false),
+                new ColumnDefinition(
+                    "name", "varchar(255)", NeutralColumnType.STRING, false, true)),
+            Instant.parse("2026-07-21T00:00:00Z"));
+    DumpRequest request =
+        DumpRequest.fromPrimaryKeyLiterals(
+            "repair-collated",
+            DumpScope.PRIMARY_KEYS,
+            schema.tableId(),
+            schema,
+            List.of("A"));
+    var requestedKey = request.primaryKeyTuples().getFirst();
+    var actualKey = schema.primaryKeyTupleFromLiteral("a");
+    Chunk chunk =
+        new Chunk(
+            request.requestId(),
+            schema.tableId().displayName(),
+            schema,
+            null,
+            List.of(ImmutableRowImage.of(Map.of("id", "a", "name", "first"))),
+            null,
+            actualKey,
+            true,
+            List.of(requestedKey));
+    WatermarkWindow window =
+        new WatermarkWindow(
+            new WatermarkToken("lw-collated"), new WatermarkToken("hw-collated"));
+    TestTransaction transaction =
+        new TestTransaction(
+            "tx-collated",
+            new ComparablePosition(1),
+            List.of(
+                watermark(schema.tableId(), "lw-collated"),
+                watermark(schema.tableId(), "hw-collated")));
+    RecordingChunkReader chunkReader = new RecordingChunkReader(Optional.of(chunk));
+    ExecutingFakeRuntime runtime = new ExecutingFakeRuntime(window, List.of(transaction));
+    DefaultTargetedRepairCoordinator<TestTransaction> coordinator =
+        new DefaultTargetedRepairCoordinator<>(
+            "MySQL",
+            "transaction",
+            runtime,
+            chunkReader,
+            new WindowReconciler(NoopTap.INSTANCE),
+            Duration.ofSeconds(1),
+            Duration.ofMillis(1),
+            NoopTap.INSTANCE);
+
+    TargetedRepairResult<TestTransaction> result = coordinator.coordinate(request, schema);
+
+    assertThat(result.missingPrimaryKeys()).isEmpty();
+    TargetedRepairBatch<TestTransaction> batch =
+        (TargetedRepairBatch<TestTransaction>) result.outcome().orElseThrow();
+    assertThat(batch.chunk().rows()).extracting(row -> row.get("id")).containsExactly("a");
+  }
+
+  @Test
   void failsClosedWhenTargetedRepairReadReturnsSelectedColumnSchemaDrift() throws Exception {
     TableSchema schema = schema();
     TableSchema driftedSchema =

@@ -35,6 +35,12 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 
 @Tag("integration-docker")
 class CrossVendorDatatypeTargetApplyIT {
+  private static final LocalTime MYSQL_TIME_INSERT = LocalTime.parse("12:34:56.789012");
+  private static final LocalTime MYSQL_TIME_UPDATE = LocalTime.parse("09:08:07.654321");
+  // PostgreSQL TIMETZ values reach the sink as their neutral LocalTime wall-clock component.
+  private static final LocalTime POSTGRES_TIMETZ_INSERT = LocalTime.parse("10:15:30.246810");
+  private static final LocalTime POSTGRES_TIMETZ_UPDATE = LocalTime.parse("21:14:13.135790");
+
   @BeforeAll
   static void startSharedTargets() {
     assumeDockerIsAvailable();
@@ -64,7 +70,7 @@ class CrossVendorDatatypeTargetApplyIT {
                 + "binary_value BYTEA NOT NULL, "
                 + "timestamp_value TIMESTAMPTZ NOT NULL, "
                 + "date_value DATE NOT NULL, "
-                + "time_value TIME NOT NULL, "
+                + "time_value TIME(6) NOT NULL, "
                 + "json_value JSONB NOT NULL, "
                 + "enum_value TEXT NOT NULL)");
       }
@@ -98,7 +104,7 @@ class CrossVendorDatatypeTargetApplyIT {
         assertThat(resultSet.getObject("date_value", LocalDate.class))
             .isEqualTo(LocalDate.parse("2026-03-29"));
         assertThat(resultSet.getObject("time_value", LocalTime.class))
-            .isEqualTo(LocalTime.parse("12:34:56"));
+            .isEqualTo(MYSQL_TIME_INSERT);
         assertThat(normalizeJson(resultSet.getString("json_value")))
             .isEqualTo(normalizeJson("{\"tag\":\"mid\",\"value\":123}"));
         assertThat(resultSet.getString("enum_value")).isEqualTo("mid");
@@ -112,7 +118,7 @@ class CrossVendorDatatypeTargetApplyIT {
         assertThat(resultSet.getObject("date_value", LocalDate.class))
             .isEqualTo(LocalDate.parse("2026-09-09"));
         assertThat(resultSet.getObject("time_value", LocalTime.class))
-            .isEqualTo(LocalTime.parse("09:08:07"));
+            .isEqualTo(MYSQL_TIME_UPDATE);
         assertThat(normalizeJson(resultSet.getString("json_value")))
             .isEqualTo(normalizeJson("{\"tag\":\"updated\",\"value\":222}"));
         assertThat(resultSet.getString("enum_value")).isEqualTo("max");
@@ -139,6 +145,7 @@ class CrossVendorDatatypeTargetApplyIT {
                 + "xml_value LONGTEXT NOT NULL, "
                 + "json_value JSON NOT NULL, "
                 + "timestamp_value TIMESTAMP NOT NULL, "
+                + "time_value TIME(6) NOT NULL, "
                 + "binary_value VARBINARY(255) NOT NULL)");
       }
 
@@ -160,7 +167,7 @@ class CrossVendorDatatypeTargetApplyIT {
           Statement statement = connection.createStatement();
           ResultSet resultSet =
               statement.executeQuery(
-                  "SELECT id, uuid_value, xml_value, json_value, timestamp_value, binary_value "
+                  "SELECT id, uuid_value, xml_value, json_value, timestamp_value, time_value, binary_value "
                       + "FROM appdb.typed_values ORDER BY id")) {
         assertThat(resultSet.next()).isTrue();
         assertThat(resultSet.getLong("id")).isEqualTo(1L);
@@ -171,6 +178,8 @@ class CrossVendorDatatypeTargetApplyIT {
             .isEqualTo(normalizeJson("{\"tag\":\"mid\",\"value\":123}"));
         assertThat(resultSet.getTimestamp("timestamp_value").toInstant())
             .isEqualTo(Instant.parse("2026-03-29T12:34:56Z"));
+        assertThat(resultSet.getObject("time_value", LocalTime.class))
+            .isEqualTo(POSTGRES_TIMETZ_INSERT);
         assertThat(resultSet.getBytes("binary_value")).containsExactly(0x12, 0x34);
 
         assertThat(resultSet.next()).isTrue();
@@ -183,6 +192,8 @@ class CrossVendorDatatypeTargetApplyIT {
             .isEqualTo(normalizeJson("{\"tag\":\"updated\",\"value\":222}"));
         assertThat(resultSet.getTimestamp("timestamp_value").toInstant())
             .isEqualTo(Instant.parse("2026-09-09T09:08:07Z"));
+        assertThat(resultSet.getObject("time_value", LocalTime.class))
+            .isEqualTo(POSTGRES_TIMETZ_UPDATE);
         assertThat(resultSet.getBytes("binary_value")).containsExactly((byte) 0xAA, 0x01);
 
         assertThat(resultSet.next()).isFalse();
@@ -199,7 +210,7 @@ class CrossVendorDatatypeTargetApplyIT {
     afterRow.put("binary_value", new byte[] {0x12, 0x34});
     afterRow.put("timestamp_value", Instant.parse("2026-03-29T12:34:56Z"));
     afterRow.put("date_value", LocalDate.parse("2026-03-29"));
-    afterRow.put("time_value", LocalTime.parse("12:34:56"));
+    afterRow.put("time_value", MYSQL_TIME_INSERT);
     afterRow.put("json_value", "{\"tag\":\"mid\",\"value\":123}");
     afterRow.put("enum_value", "mid");
     return ChangeEventTestFixtures.fromRowMaps(
@@ -223,7 +234,7 @@ class CrossVendorDatatypeTargetApplyIT {
     beforeRow.put("binary_value", new byte[] {0x12, 0x34});
     beforeRow.put("timestamp_value", Instant.parse("2026-03-29T12:34:56Z"));
     beforeRow.put("date_value", LocalDate.parse("2026-03-29"));
-    beforeRow.put("time_value", LocalTime.parse("12:34:56"));
+    beforeRow.put("time_value", MYSQL_TIME_INSERT);
     beforeRow.put("json_value", "{\"tag\":\"mid\",\"value\":123}");
     beforeRow.put("enum_value", "mid");
     LinkedHashMap<String, Object> afterRow = new LinkedHashMap<>();
@@ -232,7 +243,7 @@ class CrossVendorDatatypeTargetApplyIT {
     afterRow.put("binary_value", new byte[] {(byte) 0xAA, 0x01});
     afterRow.put("timestamp_value", Instant.parse("2026-09-09T09:08:07Z"));
     afterRow.put("date_value", LocalDate.parse("2026-09-09"));
-    afterRow.put("time_value", LocalTime.parse("09:08:07"));
+    afterRow.put("time_value", MYSQL_TIME_UPDATE);
     afterRow.put("json_value", "{\"tag\":\"updated\",\"value\":222}");
     afterRow.put("enum_value", "max");
     return ChangeEventTestFixtures.fromRowMaps(
@@ -256,6 +267,7 @@ class CrossVendorDatatypeTargetApplyIT {
     afterRow.put("xml_value", "<root value=\"123\"/>");
     afterRow.put("json_value", "{\"tag\":\"mid\",\"value\":123}");
     afterRow.put("timestamp_value", Instant.parse("2026-03-29T12:34:56Z"));
+    afterRow.put("time_value", POSTGRES_TIMETZ_INSERT);
     afterRow.put("binary_value", new byte[] {0x12, 0x34});
     return ChangeEventTestFixtures.fromRowMaps(
         tableId,
@@ -278,6 +290,7 @@ class CrossVendorDatatypeTargetApplyIT {
     beforeRow.put("xml_value", "<root value=\"123\"/>");
     beforeRow.put("json_value", "{\"tag\":\"mid\",\"value\":123}");
     beforeRow.put("timestamp_value", Instant.parse("2026-03-29T12:34:56Z"));
+    beforeRow.put("time_value", POSTGRES_TIMETZ_INSERT);
     beforeRow.put("binary_value", new byte[] {0x12, 0x34});
     LinkedHashMap<String, Object> afterRow = new LinkedHashMap<>();
     afterRow.put("id", id);
@@ -285,6 +298,7 @@ class CrossVendorDatatypeTargetApplyIT {
     afterRow.put("xml_value", "<root value=\"222\" tag=\"updated\"/>");
     afterRow.put("json_value", "{\"tag\":\"updated\",\"value\":222}");
     afterRow.put("timestamp_value", Instant.parse("2026-09-09T09:08:07Z"));
+    afterRow.put("time_value", POSTGRES_TIMETZ_UPDATE);
     afterRow.put("binary_value", new byte[] {(byte) 0xAA, 0x01});
     return ChangeEventTestFixtures.fromRowMaps(
         tableId,

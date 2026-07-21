@@ -3,6 +3,7 @@ package io.github.aandreakis.dblog.adapter.mysql.internal;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -179,6 +180,37 @@ class JdbcMySqlChunkReaderTests {
                         connection, "job-3-drift", schema, schema.primaryKeyTuplesFromLiterals(List.of("1"))))
         .isInstanceOf(SchemaDriftException.class)
         .hasMessageContaining("neutral type");
+  }
+
+  @Test
+  void doesNotRequeryEveryStringKeyWhenTheBulkTargetedReadFindsNothing() throws Exception {
+    TableSchema schema = stringSchema();
+    Connection connection = configuredConnection();
+    PreparedStatement bulkStatement = mock(PreparedStatement.class);
+    PreparedStatement fallbackStatement = mock(PreparedStatement.class);
+    ResultSet bulkResultSet = mock(ResultSet.class);
+    ResultSet fallbackResultSet = mock(ResultSet.class);
+
+    when(connection.prepareStatement(MySqlSql.targetedPrimaryKeysReadSql(schema, 2)))
+        .thenReturn(bulkStatement);
+    when(connection.prepareStatement(MySqlSql.targetedPrimaryKeysReadSql(schema, 1)))
+        .thenReturn(fallbackStatement);
+    when(bulkStatement.executeQuery()).thenReturn(bulkResultSet);
+    when(fallbackStatement.executeQuery()).thenReturn(fallbackResultSet);
+    when(bulkResultSet.next()).thenReturn(false);
+    when(fallbackResultSet.next()).thenReturn(false);
+
+    assertThat(
+            new JdbcMySqlChunkReader()
+                .targetedPrimaryKeyTuples(
+                    connection,
+                    "job-missing-strings",
+                    schema,
+                    schema.primaryKeyTuplesFromLiterals(List.of("missing-a", "missing-b"))))
+        .isEmpty();
+
+    verify(connection, times(1))
+        .prepareStatement(org.mockito.ArgumentMatchers.anyString());
   }
 
   @Test
@@ -391,6 +423,15 @@ class JdbcMySqlChunkReaderTests {
         new TableId("mysql-source", "appdb", "widgets"),
         List.of(
             new ColumnDefinition("id", "bigint", NeutralColumnType.INTEGER, true, false),
+            new ColumnDefinition("name", "varchar(255)", NeutralColumnType.STRING, false, true)),
+        Instant.parse("2026-03-21T00:00:00Z"));
+  }
+
+  private static TableSchema stringSchema() {
+    return TableSchema.create(
+        new TableId("mysql-source", "appdb", "string_widgets"),
+        List.of(
+            new ColumnDefinition("id", "varchar(255)", NeutralColumnType.STRING, true, false),
             new ColumnDefinition("name", "varchar(255)", NeutralColumnType.STRING, false, true)),
         Instant.parse("2026-03-21T00:00:00Z"));
   }

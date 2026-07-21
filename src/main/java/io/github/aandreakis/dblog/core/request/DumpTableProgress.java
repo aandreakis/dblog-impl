@@ -242,13 +242,20 @@ public record DumpTableProgress(
     PrimaryKeyTuple normalizedUpperBound =
         chunk.schema().primaryKeyTupleFor(chunk.schema().primaryKeyRowFromTuple(requestUpperBoundPrimaryKeyTuple));
     if (chunk.startAfterPrimaryKeyTuple() != null
-        && chunk.schema().comparePrimaryKeyTuples(chunk.startAfterPrimaryKeyTuple(), normalizedUpperBound)
-            >= 0) {
+        && (chunk.startAfterPrimaryKeyTuple().equals(normalizedUpperBound)
+            || (chunk.schema().canComparePrimaryKeyOrderInMemory()
+                && chunk
+                        .schema()
+                        .comparePrimaryKeyTuples(
+                            chunk.startAfterPrimaryKeyTuple(), normalizedUpperBound)
+                    > 0))) {
       throw new DumpStateCorruptionException(
           "chunk startAfterPrimaryKey must remain below requestUpperBoundPrimaryKey for table "
               + tableName);
     }
-    if (chunk.schema().comparePrimaryKeyTuples(chunk.lastPrimaryKeyTuple(), normalizedUpperBound) > 0) {
+    if (chunk.schema().canComparePrimaryKeyOrderInMemory()
+        && chunk.schema().comparePrimaryKeyTuples(chunk.lastPrimaryKeyTuple(), normalizedUpperBound)
+            > 0) {
       throw new DumpStateCorruptionException(
           "chunk lastPrimaryKey exceeded requestUpperBoundPrimaryKey for table " + tableName);
     }

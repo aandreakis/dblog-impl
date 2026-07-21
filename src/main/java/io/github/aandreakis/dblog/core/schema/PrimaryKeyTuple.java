@@ -248,6 +248,7 @@ public final class PrimaryKeyTuple implements Comparable<PrimaryKeyTuple> {
         continue;
       }
       if (character == '\\') {
+        current.append(character);
         escaping = true;
         continue;
       }

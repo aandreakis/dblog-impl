@@ -18,11 +18,40 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.time.Instant;
+import java.time.LocalTime;
+import java.time.OffsetTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
 class JdbcPostgresChunkReaderTests {
+  @Test
+  void readsTimetzAsOffsetTimeBeforeNeutralNormalization() throws Exception {
+    TableSchema schema = timetzSchema();
+    Connection connection = configuredConnection();
+    PreparedStatement statement = mock(PreparedStatement.class);
+    ResultSet resultSet = mock(ResultSet.class);
+    OffsetTime sourceValue =
+        OffsetTime.of(LocalTime.of(10, 15, 30), ZoneOffset.ofHours(2));
+
+    when(connection.prepareStatement(PostgresSql.tableChunkReadSql(schema, false, false)))
+        .thenReturn(statement);
+    when(statement.executeQuery()).thenReturn(resultSet);
+    when(resultSet.next()).thenReturn(true, false);
+    when(resultSet.getObject(1)).thenReturn(1L);
+    when(resultSet.getObject(2, OffsetTime.class)).thenReturn(sourceValue);
+
+    Chunk chunk =
+        new JdbcPostgresChunkReader()
+            .nextTableChunk(connection, "job-timetz", schema, null, null, 1)
+            .orElseThrow();
+
+    assertThat(chunk.rows().getFirst())
+        .containsEntry("observed_at", LocalTime.of(10, 15, 30));
+    verify(resultSet).getObject(2, OffsetTime.class);
+  }
+
   @Test
   void readsOrderedTableChunkThroughJdbcAndUsesLookaheadForFinalChunk() throws Exception {
     TableSchema schema = schemaWithIgnoredColumn();
@@ -199,6 +228,16 @@ class JdbcPostgresChunkReaderTests {
         List.of(
             new ColumnDefinition("id", "bigint", NeutralColumnType.INTEGER, true, false),
             new ColumnDefinition("name", "text", NeutralColumnType.STRING, false, true)),
+        Instant.parse("2026-03-20T00:00:00Z"));
+  }
+
+  private static TableSchema timetzSchema() {
+    return TableSchema.create(
+        new TableId("appdb", "public", "timed_widgets"),
+        List.of(
+            new ColumnDefinition("id", "bigint", NeutralColumnType.INTEGER, true, false),
+            new ColumnDefinition(
+                "observed_at", "time with time zone", NeutralColumnType.TIME, false, false)),
         Instant.parse("2026-03-20T00:00:00Z"));
   }
 

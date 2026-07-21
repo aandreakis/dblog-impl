@@ -157,6 +157,15 @@ Current literal shapes:
 - composite primary keys: canonical `{column=value,...}` strings or positional
   tuple strings such as `(tenant-a,42)`.
 
+Composite literals reserve `\`, `,`, `=`, `{`, and `}`. Prefix a reserved
+character with `\`; write `\\` when the primary-key value contains a literal
+backslash. For example, a value `north,west` is written as
+`{external_id=north\,west}`, while `folder\record` is written as
+`{external_id=folder\\record}`. The same escaping rules apply to positional
+tuple values. A dangling final escape is malformed and is rejected with HTTP
+`400 bad_request` rather than being queued. DBLog accepts both composite input
+forms, but canonical output always uses the named `{column=value,...}` form.
+
 The `table` object mirrors the internal three-part `TableId`. For PostgreSQL,
 `databaseName` is the physical database name and `schemaName` is the schema
 name. For MySQL, `databaseName` is the logical DBLog source id and

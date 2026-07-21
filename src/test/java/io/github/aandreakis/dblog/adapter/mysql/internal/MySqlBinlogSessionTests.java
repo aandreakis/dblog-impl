@@ -75,6 +75,40 @@ class MySqlBinlogSessionTests {
   }
 
   @Test
+  void acceptsUpdatesWhoseBinaryPrimaryKeyBytesAreUnchanged() throws Exception {
+    StubStream stream =
+        new StubStream(
+            List.of(
+                new MySqlBinlogMessage.TableMap(
+                    7L, "appdb", "binary_widgets", pos(100L), TX_TIME),
+                new MySqlBinlogMessage.Gtid("uuid:binary-pk", pos(101L), TX_TIME),
+                new MySqlBinlogMessage.UpdateRows(
+                    7L,
+                    List.of(
+                        new MySqlBinlogMessage.RowChange(
+                            new Object[] {new byte[] {0x01, 0x02}, "before"},
+                            new Object[] {new byte[] {0x01, 0x02}, "after"})),
+                    pos(102L),
+                    TX_TIME),
+                new MySqlBinlogMessage.Commit("xid-binary-pk", pos(103L), TX_TIME)));
+    MySqlBinlogSession session =
+        new MySqlBinlogSession(
+            "test-run",
+            "internal-stream",
+            "mysql-source",
+            List.of(binaryPrimaryKeySchema()),
+            stream);
+
+    MySqlBinlogTransaction transaction = session.readPendingTransaction().orElseThrow();
+
+    assertThat(transaction.events()).hasSize(1);
+    assertThat(transaction.events().getFirst().operationType()).isEqualTo(OperationType.UPDATE);
+    assertThat((byte[]) transaction.events().getFirst().primaryKey().get("id"))
+        .containsExactly(0x01, 0x02);
+    assertThat(transaction.events().getFirst().afterRow().get("name")).isEqualTo("after");
+  }
+
+  @Test
   void ignoresExtraTableMapColumnsWhenSelectedContractStillMatches() throws Exception {
     StubStream stream =
         new StubStream(
@@ -917,6 +951,15 @@ class MySqlBinlogSessionTests {
         List.of(
             new ColumnDefinition("id", "bigint", NeutralColumnType.INTEGER, true, false),
             new ColumnDefinition("json_value", "json", NeutralColumnType.JSON, false, true)),
+        Instant.parse("2026-03-21T00:00:00Z"));
+  }
+
+  private static TableSchema binaryPrimaryKeySchema() {
+    return TableSchema.create(
+        new TableId("mysql-source", "appdb", "binary_widgets"),
+        List.of(
+            new ColumnDefinition("id", "varbinary(16)", NeutralColumnType.BINARY, true, false),
+            new ColumnDefinition("name", "varchar(255)", NeutralColumnType.STRING, false, true)),
         Instant.parse("2026-03-21T00:00:00Z"));
   }
 

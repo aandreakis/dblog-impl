@@ -90,6 +90,7 @@ public final class PostgresLiveRuntimeFactory {
     Objects.requireNonNull(heartbeatWriter, "heartbeatWriter");
     Objects.requireNonNull(checkpointStore, "checkpointStore");
     Objects.requireNonNull(tap, "tap");
+    PostgresPrimaryKeyPolicy.requireSupportedForCapture(contractSchemas);
 
     String databaseName =
         config.databaseName() == null

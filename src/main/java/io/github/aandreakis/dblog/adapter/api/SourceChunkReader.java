@@ -50,8 +50,10 @@ public interface SourceChunkReader {
   /**
    * Reads the rows for an explicit list of primary keys (targeted-repair path). Duplicates in the
    * input list are de-duplicated by the implementation; the returned chunk contains only rows
-   * that exist on the source — missing keys do not raise an error. {@code Optional.empty()} when
-   * the input list is empty after de-dup.
+   * that exist on the source — missing keys do not raise an error. For source-defined equality
+   * such as collated text, the chunk records the requested tuples that the source matched even
+   * when their literals differ from the stored row keys. {@code Optional.empty()} when the input
+   * list is empty after de-dup.
    */
   Optional<Chunk> targetedPrimaryKeyTuples(
       Connection connection,

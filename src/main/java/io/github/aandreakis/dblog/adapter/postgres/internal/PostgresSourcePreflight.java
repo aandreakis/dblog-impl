@@ -52,6 +52,7 @@ public final class PostgresSourcePreflight implements SourcePreflight {
   public void ensure(RelationalSourceConfig config, List<TableSchema> contractSchemas) {
     Objects.requireNonNull(config, "config");
     Objects.requireNonNull(contractSchemas, "contractSchemas");
+    PostgresPrimaryKeyPolicy.requireSupportedForCapture(contractSchemas);
     try (Connection connection = connectionFactory.apply(config)) {
       for (TableSchema schema : contractSchemas) {
         var tableId = schema.tableId();

@@ -174,6 +174,17 @@ results before rejecting the table shape.
   checkpoint, but it can cause WAL retention to grow on the server until the
   slot advances again
 
+### `TIMETZ` normalization
+
+PostgreSQL `TIMETZ` values use DBLog's neutral `TIME` representation. Both the
+JDBC chunk path and the `pgoutput` streaming path preserve the value's local
+wall-clock component as a `LocalTime` and deliberately discard its UTC offset.
+They do not convert the value through the JVM default time zone. Because that
+neutral form cannot preserve offset-sensitive identity or ordering, `TIMETZ`
+columns are supported as ordinary selected values but not as primary keys on
+captured tables. Schema inspection and live startup fail closed before a
+replication stream is opened when a captured primary key contains `TIMETZ`.
+
 For heap sizing guidance around large committed transactions, see
 `docs/OPERATION.md` §2.4.2.
 

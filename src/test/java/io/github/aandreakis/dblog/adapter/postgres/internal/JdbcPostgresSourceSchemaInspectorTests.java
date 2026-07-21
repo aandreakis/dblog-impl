@@ -1,6 +1,7 @@
 package io.github.aandreakis.dblog.adapter.postgres.internal;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -77,6 +78,29 @@ class JdbcPostgresSourceSchemaInspectorTests {
 
     assertThat(schema).isNotNull();
     assertThat(schema.refreshedAt()).isNotEqualTo(Instant.EPOCH);
+  }
+
+  @Test
+  void rejectsTimetzPrimaryKeysBeforeLiveCaptureCanStart() throws Exception {
+    ResultSet resultSet = mock(ResultSet.class);
+    when(resultSet.next()).thenReturn(true, true, false);
+    when(resultSet.getString("column_name")).thenReturn("observed_at", "name");
+    when(resultSet.getString("source_type")).thenReturn("time with time zone", "text");
+    when(resultSet.getString("type_name")).thenReturn("timetz", "text");
+    when(resultSet.getString("type_kind")).thenReturn("b", "b");
+    when(resultSet.getInt("primary_key_ordinal")).thenReturn(1, 0);
+    when(resultSet.getBoolean("nullable")).thenReturn(false, true);
+
+    JdbcPostgresSourceSchemaInspector inspector = new JdbcPostgresSourceSchemaInspector();
+
+    assertThatThrownBy(
+            () ->
+                inspector.readTableSchema(
+                    connectionReturning(resultSet),
+                    new TableId("appdb", "public", "timed_widgets")))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessageContaining("TIMETZ primary key")
+        .hasMessageContaining("public.timed_widgets");
   }
 
   private static Connection connectionReturning(ResultSet resultSet) throws Exception {

@@ -14,6 +14,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.Statement;
 import java.time.Instant;
+import java.time.LocalTime;
 import java.util.List;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -21,6 +22,48 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 
 @Tag("integration-docker")
 class JdbcPostgresChunkReaderIT {
+  @Test
+  void readsSupportedTimetzColumnsThroughJdbc() throws Exception {
+    assumeDockerIsAvailable();
+
+    try (PostgreSQLContainer postgres = LivePostgresTestContainers.newBaseContainer()) {
+      postgres.start();
+      try (Connection connection =
+              DriverManager.getConnection(
+                  postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
+          Statement statement = connection.createStatement()) {
+        configureSqlConnection(connection);
+        statement.execute(
+            "CREATE TABLE public.timed_widgets "
+                + "(id BIGINT PRIMARY KEY, observed_at TIMETZ NOT NULL)");
+        statement.execute(
+            "INSERT INTO public.timed_widgets (id, observed_at) "
+                + "VALUES (1, TIMETZ '10:15:30+02:00')");
+
+        TableSchema schema =
+            TableSchema.create(
+                new TableId(postgres.getDatabaseName(), "public", "timed_widgets"),
+                List.of(
+                    new ColumnDefinition("id", "bigint", NeutralColumnType.INTEGER, true, false),
+                    new ColumnDefinition(
+                        "observed_at", "timetz", NeutralColumnType.TIME, false, false)),
+                Instant.parse("2026-03-20T00:00:00Z"));
+
+        Chunk chunk =
+            new JdbcPostgresChunkReader()
+                .nextTableChunk(connection, "job-timetz", schema, null, null, 10)
+                .orElseThrow();
+
+        assertThat(chunk.rows())
+            .singleElement()
+            .satisfies(
+                row ->
+                    assertThat(row.get("observed_at"))
+                        .isEqualTo(LocalTime.of(10, 15, 30)));
+      }
+    }
+  }
+
   @Test
   void readsOrderedAndTargetedChunksThroughJdbcOnRealPostgres() throws Exception {
     assumeDockerIsAvailable();

@@ -258,7 +258,12 @@ public final class DefaultTargetedRepairCoordinator<TX extends SourceTransaction
 
   private static List<PrimaryKeyTuple> missingRequestedKeys(
       List<PrimaryKeyTuple> requestedKeys, Chunk chunk) {
-    LinkedHashSet<PrimaryKeyTuple> foundKeys = new LinkedHashSet<>(chunk.rowPrimaryKeyTuples());
+    List<PrimaryKeyTuple> matchedRequestedKeys = chunk.matchedRequestedPrimaryKeyTuples();
+    LinkedHashSet<PrimaryKeyTuple> foundKeys =
+        new LinkedHashSet<>(
+            matchedRequestedKeys.isEmpty()
+                ? chunk.rowPrimaryKeyTuples()
+                : matchedRequestedKeys);
     List<PrimaryKeyTuple> missing = new ArrayList<>();
     for (PrimaryKeyTuple requestedKey : requestedKeys) {
       if (!foundKeys.contains(requestedKey)) {
