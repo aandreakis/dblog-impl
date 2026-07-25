@@ -24,6 +24,7 @@ import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.List;
 import java.util.Optional;
+import java.util.TimeZone;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
@@ -839,8 +840,12 @@ class MySqlBinlogSessionTests {
                     List.<Object[]>of(
                         new Object[] {
                           1L,
-                          java.sql.Date.valueOf(LocalDate.parse("2026-03-21")),
-                          Time.valueOf(LocalTime.parse("10:15:30")),
+                          // The connector builds DATE and TIME as GMT-based epochs (UnixTime.from),
+                          // not via Date.valueOf/Time.valueOf, whose JVM-zone convention would
+                          // misrepresent the decoder and mask the zone handling these paths
+                          // depend on.
+                          new java.sql.Date(LocalDate.parse("2026-03-21").toEpochDay() * 86_400_000L),
+                          new Time(((10L * 3600) + (15 * 60) + 30) * 1000L),
                           Timestamp.from(happenedAt),
                           uuid.toString()
                         }),
@@ -864,6 +869,109 @@ class MySqlBinlogSessionTests {
         .containsEntry("event_time", LocalTime.parse("10:15:30"))
         .containsEntry("updated_at", happenedAt)
         .containsEntry("entity_uuid", uuid);
+  }
+
+  /**
+   * The binlog and the JDBC driver disagree about what {@code java.sql.Time#getTime()} means, and
+   * only one of them matches {@code toLocalTime()}.
+   *
+   * <p>{@code AbstractRowsEventDataDeserializer#deserializeTimeV2} builds the value through {@code
+   * UnixTime.from(...)} — a GMT-based epoch — and wraps it in a {@code java.sql.Time}. Reading
+   * those millis back with {@code
+   * Time#toLocalTime()} reinterprets them in the JVM default zone, so every LOG-origin time-of-day
+   * is shifted by the JVM's offset while the chunk path reports the true wall clock. With TIME in
+   * the primary key the two capture origins then hash differently and the in-window collision is
+   * missed.
+   *
+   * <p>The sibling temporal test cannot catch this: it builds its fixture with {@code
+   * Time.valueOf(...)}, which uses the opposite (JDBC, JVM-zone) convention and cancels the bug
+   * out. This test pins a non-UTC default zone because CI runs UTC, where the offset is zero.
+   */
+  @Test
+  void decodesBinlogTemporalValuesIndependentlyOfTheJvmDefaultZone() throws Exception {
+    TimeZone originalDefault = TimeZone.getDefault();
+    TimeZone.setDefault(TimeZone.getTimeZone("America/New_York"));
+    try {
+      // Exactly what UnixTime.from(1970, 1, 1, 10, 15, 30, 456) produces: a GMT-based epoch.
+      Time binlogTimeValue = new Time(((10L * 3600) + (15 * 60) + 30) * 1000L + 456L);
+      // deserializeDate builds java.sql.Date from the same GMT-based epoch.
+      java.sql.Date binlogDateValue =
+          new java.sql.Date(LocalDate.parse("2026-03-21").toEpochDay() * 86_400_000L);
+      Instant happenedAt = Instant.parse("2026-03-21T10:15:30Z");
+      UUID uuid = UUID.fromString("11111111-1111-1111-1111-111111111111");
+      StubStream stream =
+          new StubStream(
+              List.of(
+                  new MySqlBinlogMessage.TableMap(7L, "appdb", "typed_values", pos(100L), TX_TIME),
+                  new MySqlBinlogMessage.Gtid("uuid:zone", pos(101L), TX_TIME),
+                  new MySqlBinlogMessage.WriteRows(
+                      7L,
+                      List.<Object[]>of(
+                          new Object[] {
+                            1L,
+                            binlogDateValue,
+                            binlogTimeValue,
+                            Timestamp.from(happenedAt),
+                            uuid.toString()
+                          }),
+                      pos(102L),
+                      TX_TIME),
+                  new MySqlBinlogMessage.Commit("xid-zone", pos(103L), TX_TIME)));
+      MySqlBinlogSession session =
+          new MySqlBinlogSession(
+              "test-run", "internal-stream", "mysql-source", List.of(typedScalarSchema()), stream);
+
+      MySqlBinlogTransaction transaction = session.readPendingTransaction().orElseThrow();
+
+      assertThat(transaction.events().getFirst().afterRow().asMap())
+          .containsEntry("event_time", LocalTime.parse("10:15:30.456"))
+          .containsEntry("event_date", LocalDate.parse("2026-03-21"));
+    } finally {
+      TimeZone.setDefault(originalDefault);
+    }
+  }
+
+  /**
+   * MySQL {@code DATE} reaches back to {@code 1000-01-01}, and the connector switches construction
+   * strategy at the Gregorian cutover: {@code UnixTime.from} falls back to a GMT {@code
+   * GregorianCalendar} for dates before 1582-10-15, which is Julian there. Decoding such an epoch
+   * as a proleptic-Gregorian {@code Instant} shifts it forward by the accumulated drift — ten days
+   * in the 16th century — in every JVM zone, including UTC. Decode must mirror the connector's own
+   * construction across the whole range.
+   */
+  @Test
+  void decodesPreGregorianCutoverBinlogDatesWithoutCalendarDrift() throws Exception {
+    java.util.Calendar gmt = java.util.Calendar.getInstance(TimeZone.getTimeZone("GMT"));
+    gmt.clear();
+    gmt.set(1500, java.util.Calendar.JUNE, 15, 0, 0, 0);
+    java.sql.Date binlogDateValue = new java.sql.Date(gmt.getTimeInMillis());
+
+    StubStream stream =
+        new StubStream(
+            List.of(
+                new MySqlBinlogMessage.TableMap(7L, "appdb", "typed_values", pos(100L), TX_TIME),
+                new MySqlBinlogMessage.Gtid("uuid:julian", pos(101L), TX_TIME),
+                new MySqlBinlogMessage.WriteRows(
+                    7L,
+                    List.<Object[]>of(
+                        new Object[] {
+                          1L,
+                          binlogDateValue,
+                          new Time(((10L * 3600) + (15 * 60) + 30) * 1000L),
+                          Timestamp.from(Instant.parse("2026-03-21T10:15:30Z")),
+                          UUID.fromString("11111111-1111-1111-1111-111111111111").toString()
+                        }),
+                    pos(102L),
+                    TX_TIME),
+                new MySqlBinlogMessage.Commit("xid-julian", pos(103L), TX_TIME)));
+    MySqlBinlogSession session =
+        new MySqlBinlogSession(
+            "test-run", "internal-stream", "mysql-source", List.of(typedScalarSchema()), stream);
+
+    MySqlBinlogTransaction transaction = session.readPendingTransaction().orElseThrow();
+
+    assertThat(transaction.events().getFirst().afterRow().asMap())
+        .containsEntry("event_date", LocalDate.parse("1500-06-15"));
   }
 
   @Test

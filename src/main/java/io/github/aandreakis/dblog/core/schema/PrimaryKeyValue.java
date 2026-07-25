@@ -216,7 +216,11 @@ public final class PrimaryKeyValue implements Comparable<PrimaryKeyValue> {
       return BigDecimal.valueOf(((Number) rawValue).longValue()).stripTrailingZeros();
     }
     if (rawValue instanceof Float || rawValue instanceof Double) {
-      return BigDecimal.valueOf(((Number) rawValue).doubleValue()).stripTrailingZeros();
+      // Delegate for the same reason as the java.sql.Time branch below: chunk readers hand the raw
+      // driver value straight to this class, so widening a Float to a double here — and keeping the
+      // binary error that exposes — would make the table-scan upper bound disagree with the chunk
+      // row's own key for a float4 column.
+      return NeutralValueNormalizer.normalizeDecimalValue(rawValue).stripTrailingZeros();
     }
     if (rawValue instanceof String value) {
       try {
@@ -276,7 +280,10 @@ public final class PrimaryKeyValue implements Comparable<PrimaryKeyValue> {
       return value;
     }
     if (rawValue instanceof java.sql.Time value) {
-      return value.toLocalTime();
+      // Delegate rather than calling toLocalTime() directly: that discards the millisecond field,
+      // and chunk readers hand the raw driver value straight to this class without passing it
+      // through the normalizer first.
+      return NeutralValueNormalizer.normalizeTimeValue(value);
     }
     if (rawValue instanceof OffsetTime value) {
       return value.toLocalTime();

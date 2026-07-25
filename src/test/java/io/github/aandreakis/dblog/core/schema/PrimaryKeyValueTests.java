@@ -52,6 +52,46 @@ class PrimaryKeyValueTests {
     assertThat(decimalValue.literal()).isEqualTo("10.5");
   }
 
+  /**
+   * The chunk readers put the raw driver value straight into the primary-key row — {@code
+   * readPrimaryKeyTuple} does not run it through {@link NeutralValueNormalizer} — so this class
+   * has to preserve the millisecond field itself. Losing it truncates the bound returned by {@code
+   * tableScanUpperBoundPrimaryKeyTuple}, which is bound into the chunk SQL as {@code pk <= ?}, so
+   * rows in the truncated remainder at the tail of the scan are never dumped.
+   *
+   * <p>This closes the gap on PostgreSQL. On MySQL it only narrows it from one second to one
+   * millisecond: Connector/J itself truncates microseconds, so the final sub-millisecond window of
+   * a MySQL {@code TIME(4..6)} primary key is still not dumped.
+   */
+  @Test
+  void keepsSubSecondPrecisionInTimePrimaryKeyValues() {
+    Time driverValue = Time.valueOf(LocalTime.of(1, 2, 3));
+    driverValue.setTime(driverValue.getTime() + 750);
+
+    assertThat(PrimaryKeyValue.fromColumn(TIME_PK, driverValue).literal())
+        .isEqualTo("01:02:03.750");
+  }
+
+  /**
+   * Same raw-value hazard as {@link #keepsSubSecondPrecisionInTimePrimaryKeyValues}: chunk readers
+   * hand the driver value straight to this class, so a {@code float4} key reached through {@code
+   * tableScanUpperBoundPrimaryKeyTuple} must normalize to the same literal as the chunk row's own
+   * key, which goes through {@link NeutralValueNormalizer}. Widening the Float to a double first
+   * yields 0.10000000149011612 and the two disagree.
+   */
+  @Test
+  void normalizesFloatPrimaryKeysThroughTheShortestRoundTrippingDecimal() {
+    ColumnDefinition floatPk =
+        new ColumnDefinition("score", "real", NeutralColumnType.FLOAT, true, false);
+
+    assertThat(PrimaryKeyValue.fromColumn(floatPk, 0.1f).literal())
+        .isEqualTo(
+            PrimaryKeyValue.fromColumn(
+                    floatPk, NeutralValueNormalizer.normalizeDecimalValue(0.1f))
+                .literal())
+        .isEqualTo("0.1");
+  }
+
   @Test
   void normalizesDateTimeAndRejectsInconsistentTimestampRepresentations() {
     PrimaryKeyValue dateValue =

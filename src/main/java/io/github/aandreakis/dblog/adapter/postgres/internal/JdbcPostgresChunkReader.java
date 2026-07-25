@@ -5,6 +5,7 @@ import io.github.aandreakis.dblog.core.model.ImmutableRowImage;
 import io.github.aandreakis.dblog.core.model.RowLayout;
 import io.github.aandreakis.dblog.core.reconcile.Chunk;
 import io.github.aandreakis.dblog.core.schema.ColumnDefinition;
+import io.github.aandreakis.dblog.core.schema.NeutralColumnType;
 import io.github.aandreakis.dblog.core.schema.NeutralValueNormalizer;
 import io.github.aandreakis.dblog.core.schema.PrimaryKeyTuple;
 import io.github.aandreakis.dblog.core.schema.PrimaryKeyValue;
@@ -17,6 +18,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
+import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.time.OffsetTime;
 import java.time.ZoneOffset;
@@ -337,6 +339,15 @@ public final class JdbcPostgresChunkReader implements SourceChunkReader {
       ResultSet resultSet, int columnIndex, ColumnDefinition column) throws SQLException {
     if (column.isTimeWithTimeZone()) {
       return resultSet.getObject(columnIndex, OffsetTime.class);
+    }
+    if (column.neutralType() == NeutralColumnType.TIME) {
+      // A bare getObject yields java.sql.Time, which caps at milliseconds, while the pgoutput path
+      // parses time(n) from text and keeps full microsecond precision. An untyped read here would
+      // therefore make the chunk row and the log event for the same row disagree — and where TIME
+      // is part of the primary key, that hides the in-window collision and lets the stale snapshot
+      // row win. Unlike MySQL, whose binlog caps at milliseconds too, PostgreSQL can match the log
+      // path exactly, so read the full precision.
+      return resultSet.getObject(columnIndex, LocalTime.class);
     }
     return resultSet.getObject(columnIndex);
   }

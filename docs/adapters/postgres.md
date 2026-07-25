@@ -185,6 +185,40 @@ columns are supported as ordinary selected values but not as primary keys on
 captured tables. Schema inspection and live startup fail closed before a
 replication stream is opened when a captured primary key contains `TIMETZ`.
 
+### `time(n)` precision
+
+PostgreSQL `time(n)` values keep full **microsecond** precision on both capture
+origins. `pgoutput` delivers the value as text, so the streaming path parses the
+fractional second exactly; the chunk read is type-aware for the same reason. An
+untyped JDBC read would yield a `java.sql.Time`, which caps at milliseconds and
+would make a snapshot row disagree with a log event for the same row. (MySQL
+cannot match this — see `docs/adapters/mysql.md`.)
+
+One edge is inconsistent rather than supported: PostgreSQL accepts
+`time '24:00:00'`, which the chunk path surfaces as `LocalTime.MAX` while the
+`pgoutput` path rejects the text outright.
+
+### Known chunk-path value defects
+
+`float4` values are normalized to the shortest decimal that round-trips, so the
+chunk path and the `pgoutput` path agree on the *number* — a driver `Float` is no
+longer widened to a double first, which used to turn `0.1` into
+`0.10000000149011612` on the chunk path only. They do not always agree on the
+`BigDecimal` **scale**, because Java's and PostgreSQL's shortest-decimal formats
+differ: `1.0f` renders as `1.0` (scale 1) through Java and `1` (scale 0) through
+`float4out`, and `1e-5f` as `1.0E-5` (scale 6) versus `1e-05` (scale 5). Since
+`BigDecimal.equals` is scale-sensitive, a non-key `float4` payload value can
+still compare unequal across capture origins. Primary keys are unaffected:
+`PrimaryKeyValue` applies `stripTrailingZeros`, which canonicalizes the scale.
+
+`timestamp without time zone` is normalized differently by capture origin: the
+chunk read produces a JVM-zone-dependent `Instant`, while `pgoutput` produces a
+zone-less `LocalDateTime`. Aligning them means changing the neutral
+representation of the type, which also moves primary-key literal format and
+therefore persisted dump progress — a migration rather than a local fix. Until
+then, avoid `timestamp without time zone` in a captured primary key, or run with
+the JVM in UTC so the two forms agree.
+
 For heap sizing guidance around large committed transactions, see
 `docs/OPERATION.md` §2.4.2.
 

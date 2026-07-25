@@ -52,6 +52,38 @@ class JdbcPostgresChunkReaderTests {
     verify(resultSet).getObject(2, OffsetTime.class);
   }
 
+  /**
+   * A bare {@code getObject} on a {@code time(n)} column hands back a {@link java.sql.Time}, whose
+   * {@code toLocalTime()} drops the whole sub-second field. The pgoutput path parses the same value
+   * from text and keeps microseconds, so the chunk row and the log event for one row disagree —
+   * and where {@code TIME} is part of the primary key the in-window collision is missed and the
+   * stale snapshot row survives. Read {@code TIME} type-aware, exactly as {@code timetz} already is.
+   */
+  @Test
+  void readsPlainTimeWithSubSecondPrecision() throws Exception {
+    TableSchema schema = timeSchema();
+    Connection connection = configuredConnection();
+    PreparedStatement statement = mock(PreparedStatement.class);
+    ResultSet resultSet = mock(ResultSet.class);
+    LocalTime sourceValue = LocalTime.of(10, 15, 30, 123_456_000);
+
+    when(connection.prepareStatement(PostgresSql.tableChunkReadSql(schema, false, false)))
+        .thenReturn(statement);
+    when(statement.executeQuery()).thenReturn(resultSet);
+    when(resultSet.next()).thenReturn(true, false);
+    when(resultSet.getObject(1)).thenReturn(1L);
+    // What an untyped read yields today: java.sql.Time cannot carry more than milliseconds.
+    when(resultSet.getObject(2)).thenReturn(java.sql.Time.valueOf(sourceValue.withNano(0)));
+    when(resultSet.getObject(2, LocalTime.class)).thenReturn(sourceValue);
+
+    Chunk chunk =
+        new JdbcPostgresChunkReader()
+            .nextTableChunk(connection, "job-time", schema, null, null, 1)
+            .orElseThrow();
+
+    assertThat(chunk.rows().getFirst()).containsEntry("observed_at", sourceValue);
+  }
+
   @Test
   void readsOrderedTableChunkThroughJdbcAndUsesLookaheadForFinalChunk() throws Exception {
     TableSchema schema = schemaWithIgnoredColumn();
@@ -238,6 +270,15 @@ class JdbcPostgresChunkReaderTests {
             new ColumnDefinition("id", "bigint", NeutralColumnType.INTEGER, true, false),
             new ColumnDefinition(
                 "observed_at", "time with time zone", NeutralColumnType.TIME, false, false)),
+        Instant.parse("2026-03-20T00:00:00Z"));
+  }
+
+  private static TableSchema timeSchema() {
+    return TableSchema.create(
+        new TableId("appdb", "public", "timed_widgets"),
+        List.of(
+            new ColumnDefinition("id", "bigint", NeutralColumnType.INTEGER, true, false),
+            new ColumnDefinition("observed_at", "time(6)", NeutralColumnType.TIME, false, false)),
         Instant.parse("2026-03-20T00:00:00Z"));
   }
 

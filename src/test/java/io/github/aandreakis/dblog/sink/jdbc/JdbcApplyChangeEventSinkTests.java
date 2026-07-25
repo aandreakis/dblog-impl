@@ -32,6 +32,7 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.TimeZone;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -394,6 +395,9 @@ class JdbcApplyChangeEventSinkTests {
     when(connection.prepareStatement(anyString())).thenReturn(statement);
     when(statement.executeBatch()).thenReturn(new int[] {1});
 
+    TimeZone originalDefault = TimeZone.getDefault();
+    TimeZone.setDefault(TimeZone.getTimeZone("Europe/Berlin"));
+    try {
     TableId tableId = new TableId("source", "demo", "temporal_orders");
     JdbcApplyTargetSchemaInspector.TargetTableMetadata metadata =
         new JdbcApplyTargetSchemaInspector.TargetTableMetadata(
@@ -410,7 +414,10 @@ class JdbcApplyChangeEventSinkTests {
     afterRow.put("id", 1L);
     LocalDate dateValue = LocalDate.parse("2026-03-29");
     LocalTime timeValue = LocalTime.parse("12:34:56.789012");
-    LocalDateTime timestampValue = LocalDateTime.parse("2026-03-29T12:34:56");
+    // 02:30 on 2026-03-29 does not exist in Europe/Berlin — the clocks jump 02:00 -> 03:00.
+    // Timestamp.valueOf resolves such a wall clock through the JVM default zone and silently
+    // slides it forward an hour; binding the LocalDateTime itself sends the literal wall clock.
+    LocalDateTime timestampValue = LocalDateTime.parse("2026-03-29T02:30:00");
     afterRow.put("event_date", dateValue);
     afterRow.put("event_time", timeValue);
     afterRow.put("updated_at", timestampValue);
@@ -439,7 +446,10 @@ class JdbcApplyChangeEventSinkTests {
 
     verify(statement).setDate(2, Date.valueOf(dateValue));
     verify(statement).setObject(3, timeValue);
-    verify(statement).setTimestamp(4, Timestamp.valueOf(timestampValue));
+    verify(statement).setObject(4, timestampValue);
+    } finally {
+      TimeZone.setDefault(originalDefault);
+    }
   }
 
   @Test

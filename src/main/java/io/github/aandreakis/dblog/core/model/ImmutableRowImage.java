@@ -136,10 +136,12 @@ public final class ImmutableRowImage {
   }
 
   /**
-   * Returns a {@code Map<String, Object>} view preserving column order. The view is lazily
-   * materialized for layout-cached instances and cached; subsequent calls return the same map.
-   * Useful for code that must interoperate with {@code Map}-shaped APIs (JSON serialization,
-   * legacy codecs). Prefer {@link #get}, {@link #valueAt}, or {@link #forEach} in new code.
+   * Returns a {@code Map<String, Object>} view preserving column order. Instances constructed from
+   * a map return their retained unmodifiable copy; instances built over a {@link RowLayout} rebuild
+   * the view on every call, because this type is immutable and shared across threads without
+   * synchronization. Useful for code that must interoperate with {@code Map}-shaped APIs (JSON
+   * serialization, legacy codecs) — prefer {@link #get}, {@link #valueAt}, or {@link #forEach} in
+   * new code, and hoist the result out of a loop rather than calling this per row.
    */
   public Map<String, Object> asMap() {
     Map<String, Object> existing = asMap;

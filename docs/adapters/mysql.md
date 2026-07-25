@@ -159,6 +159,46 @@ timestamps. If exact MySQL `DATETIME(6)` live-path fidelity matters, avoid
 putting those columns in the selected replicated surface or treat them as a
 known adapter limitation.
 
+### `TIME` precision limitation
+
+MySQL `TIME(n)` values are carried at **millisecond** precision on both capture
+origins. `mysql-binlog-connector-java` builds its `TIME` row values as a
+`java.sql.Time`, which cannot represent microseconds, so `TIME(4)` through
+`TIME(6)` lose their last three digits on the live path regardless of what the
+chunk read does. The chunk read is deliberately held at the same ceiling rather
+than reading full microseconds: making the two origins disagree would hide the
+in-window collision between a snapshot row and a fresher log event for the same
+row. PostgreSQL is not limited this way — see `docs/adapters/postgres.md`.
+
+Two related edges are unsupported rather than approximated:
+
+- MySQL `TIME` outside `00:00:00..23:59:59` — legal in MySQL, which treats
+  `TIME` as a duration — has no neutral representation, since the neutral type
+  is `java.time.LocalTime`. The two paths do not even fail the same way: the
+  chunk read raises a driver error, while the binlog path silently wraps modulo
+  24 hours, so `25:00:00` arrives as `01:00:00` and `838:59:59` as `22:59:59`.
+  Negative values are worse than a wrap: the decoder never interprets the
+  `TIME2` sign bit, so `-01:00:00` is read as hour 1023 and arrives as `15:00`.
+  Keep such columns out of the replicated surface.
+- Because the chunk read stops at milliseconds, a `TIME(4..6)` **primary key**
+  still yields a table-scan upper bound truncated by up to one millisecond, so
+  rows in that final sub-millisecond window are not dumped.
+
+### Known live-path value defects
+
+These are unfixed divergences between the chunk path and the binlog path. All
+are silent — none fails closed:
+
+- `ENUM` is decoded as its ordinal and `SET` as its bitmask, so a live event
+  carries `3` where a dump carries `shipped`. The label arrays are captured in
+  the table-map message but not yet consumed.
+- Unsigned integers are sign-extended, so values above the signed range arrive
+  negative on the live path.
+- `TIMESTAMP` primary keys are read UTC-pinned but bound back using the JVM
+  default zone, which can silently skip or replay rows during keyset
+  pagination. The same JVM-zone assumption applies when the JDBC apply sink
+  binds a neutral `Instant` to a MySQL target.
+
 For heap sizing guidance around large committed transactions, see
 `docs/OPERATION.md` §2.4.2.
 

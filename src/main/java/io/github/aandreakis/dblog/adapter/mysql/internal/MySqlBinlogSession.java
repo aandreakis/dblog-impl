@@ -19,13 +19,17 @@ import io.github.aandreakis.dblog.core.schema.TableSchema;
 import io.github.aandreakis.dblog.runtime.sql.SourceFlowControlSnapshot;
 import java.sql.SQLException;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.TimeZone;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Pattern;
 import org.slf4j.Logger;
@@ -43,6 +47,14 @@ import org.slf4j.LoggerFactory;
  */
 public final class MySqlBinlogSession implements MySqlTransactionStream {
   private static final Logger log = LoggerFactory.getLogger(MySqlBinlogSession.class);
+
+  private static final TimeZone GMT_TIMEZONE = TimeZone.getTimeZone("GMT");
+
+  /**
+   * {@code 1582-10-15T00:00:00Z}. {@code UnixTime.from} switches to a GMT {@code GregorianCalendar}
+   * below this instant, so decoding must switch with it.
+   */
+  private static final long GREGORIAN_CUTOVER_EPOCH_MILLI = -12219292800000L;
 
   private static final Object SKIP_DECODED_VALUE = new Object();
   private static final UserValueDecoder SKIP_DECODER = value -> SKIP_DECODED_VALUE;
@@ -968,12 +980,65 @@ public final class MySqlBinlogSession implements MySqlTransactionStream {
               : NeutralValueNormalizer.normalizeJsonValue(
                   MySqlValueDecoder.INSTANCE.decodeJson(value));
       case BINARY -> value -> value == null ? null : NeutralValueNormalizer.normalizeBinaryValue(value);
-      case DATE -> value -> value == null ? null : NeutralValueNormalizer.normalizeDateValue(value);
-      case TIME -> value -> value == null ? null : NeutralValueNormalizer.normalizeTimeValue(value);
+      case DATE -> value -> value == null ? null : normalizeBinlogDateValue(value);
+      case TIME -> value -> value == null ? null : normalizeBinlogTimeValue(value);
       case TIMESTAMP ->
           value -> value == null ? null : NeutralValueNormalizer.normalizeTimestampValue(value);
       case UUID -> value -> value == null ? null : NeutralValueNormalizer.normalizeUuidValue(value);
       case UNSUPPORTED -> definition.primaryKey() ? RAW_VALUE_DECODER : SKIP_DECODER;
     };
+  }
+
+  /**
+   * DATE half of the epoch-convention split documented on {@link #normalizeBinlogTimeValue}.
+   *
+   * <p>{@code AbstractRowsEventDataDeserializer#deserializeDate} builds its {@code java.sql.Date}
+   * from the same GMT-based epoch. Reading it back with {@code Date#toLocalDate()} resolves the
+   * calendar day in the JVM default zone, so in any zone with a negative UTC offset every
+   * LOG-origin date lands a day early while the chunk path reports the correct one. DATE is a
+   * supported primary-key type, so the two origins would also key differently.
+   */
+  private static Object normalizeBinlogDateValue(Object value) {
+    if (value instanceof java.sql.Date date) {
+      long epochMilli = date.getTime();
+      if (epochMilli >= GREGORIAN_CUTOVER_EPOCH_MILLI) {
+        return Instant.ofEpochMilli(epochMilli).atOffset(ZoneOffset.UTC).toLocalDate();
+      }
+      // Before the cutover the connector builds the epoch with a GMT GregorianCalendar, which is
+      // Julian there, so a proleptic-Gregorian reading drifts (ten days by the 16th century) in
+      // every zone including UTC. MySQL DATE reaches back to 1000-01-01, so this is reachable.
+      // Calendar is not thread-safe and is mutated here; allocate fresh, as the chunk reader does.
+      Calendar calendar = Calendar.getInstance(GMT_TIMEZONE);
+      calendar.setTimeInMillis(epochMilli);
+      return LocalDate.of(
+          calendar.get(Calendar.YEAR),
+          calendar.get(Calendar.MONTH) + 1,
+          calendar.get(Calendar.DAY_OF_MONTH));
+    }
+    return NeutralValueNormalizer.normalizeDateValue(value);
+  }
+
+  /**
+   * The binlog and the JDBC driver disagree about what the epoch inside a {@code java.sql.Time}
+   * means, so TIME cannot be normalized by the shared, dialect-free path.
+   *
+   * <p>{@link #normalizeBinlogDateValue} is the DATE half of the same problem.
+   *
+   * <p>{@code AbstractRowsEventDataDeserializer#deserializeTimeV2} builds the value through {@code
+   * UnixTime.from(...)} — a GMT-based epoch — and wraps it in a {@code java.sql.Time}. The shared
+   * normalizer reads such a value with {@code Time#toLocalTime()}, which is correct for the chunk
+   * path (Connector/J builds the same type from wall-clock fields in the JVM zone) but reinterprets
+   * the binlog's GMT epoch in the JVM default zone, shifting every LOG-origin time-of-day off the
+   * true wall clock. Extract the GMT wall clock explicitly here instead, leaving the chunk path's
+   * convention untouched, so both capture origins agree in any JVM zone.
+   *
+   * <p>{@code Time#toInstant()} is not an option — {@code java.sql.Time} overrides it to throw
+   * {@link UnsupportedOperationException}.
+   */
+  private static Object normalizeBinlogTimeValue(Object value) {
+    if (value instanceof java.sql.Time time) {
+      return Instant.ofEpochMilli(time.getTime()).atOffset(ZoneOffset.UTC).toLocalTime();
+    }
+    return NeutralValueNormalizer.normalizeTimeValue(value);
   }
 }

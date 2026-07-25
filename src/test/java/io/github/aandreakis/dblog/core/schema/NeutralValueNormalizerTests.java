@@ -313,6 +313,20 @@ class NeutralValueNormalizerTests {
         Arguments.of("2026-04-12", reference));
   }
 
+  /**
+   * PostgreSQL {@code float4} reaches the chunk path as a {@link Float} and the pgoutput path as
+   * text. Widening the Float to a double first exposes the binary representation error, so the two
+   * origins produce different BigDecimals for one stored value and in-window collision suppression
+   * stops matching. {@link Float#toString} gives the shortest decimal that round-trips, which is
+   * what the text path already parses.
+   */
+  @Test
+  void float4NormalizesIdenticallyFromDriverFloatAndFromLogText() {
+    assertThat(normalized(NeutralColumnType.FLOAT, 0.1f))
+        .isEqualTo(normalized(NeutralColumnType.FLOAT, "0.1"))
+        .isEqualTo(new BigDecimal("0.1"));
+  }
+
   @ParameterizedTest
   @MethodSource("timeCases")
   void timeNormalizationCoercesToLocalTime(Object input, LocalTime expected) {
@@ -332,6 +346,23 @@ class NeutralValueNormalizerTests {
         // Time extracted from ISO datetime strings with either 'T' or space separators.
         Arguments.of("2026-04-12T10:15:30", reference),
         Arguments.of("2026-04-12 10:15:30", reference));
+  }
+
+  /**
+   * {@code java.sql.Time#toLocalTime()} discards the millisecond field, so a driver that surfaces
+   * a {@code TIME(n)} column as {@code java.sql.Time} silently loses sub-second precision.
+   *
+   * <p>The live consumers of this branch are the MySQL chunk read and {@link PrimaryKeyValue} —
+   * pgoutput hands over a String, and the MySQL binlog decodes its own GMT-based epoch separately.
+   * Dropping the field here leaves the chunk row coarser than the log event for the same row.
+   */
+  @Test
+  void timeNormalizationKeepsSubSecondPrecisionFromSqlTime() {
+    LocalTime reference = LocalTime.of(10, 15, 30, 789_000_000);
+    java.sql.Time sqlTime = java.sql.Time.valueOf(reference.withNano(0));
+    sqlTime.setTime(sqlTime.getTime() + 789);
+
+    assertThat(normalized(NeutralColumnType.TIME, sqlTime)).isEqualTo(reference);
   }
 
   @ParameterizedTest

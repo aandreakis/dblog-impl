@@ -22,6 +22,109 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 
 @Tag("integration-docker")
 class JdbcPostgresChunkReaderIT {
+  /**
+   * Proves against the real driver that a {@code time(n)} chunk read keeps its fractional second.
+   * An untyped {@code getObject} yields a {@link java.sql.Time}, which cannot carry microseconds
+   * and whose {@code toLocalTime()} drops milliseconds too, while the pgoutput path parses the
+   * same value from text at full precision — so the snapshot row and the log event for one row
+   * would disagree.
+   */
+  @Test
+  void readsFractionalTimeColumnsThroughJdbcWithoutTruncation() throws Exception {
+    assumeDockerIsAvailable();
+
+    try (PostgreSQLContainer postgres = LivePostgresTestContainers.newBaseContainer()) {
+      postgres.start();
+      try (Connection connection =
+              DriverManager.getConnection(
+                  postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
+          Statement statement = connection.createStatement()) {
+        configureSqlConnection(connection);
+        statement.execute(
+            "CREATE TABLE public.fractional_widgets "
+                + "(id BIGINT PRIMARY KEY, observed_at TIME(6) NOT NULL)");
+        statement.execute(
+            "INSERT INTO public.fractional_widgets (id, observed_at) "
+                + "VALUES (1, TIME '10:15:30.123456')");
+
+        TableSchema schema =
+            TableSchema.create(
+                new TableId(postgres.getDatabaseName(), "public", "fractional_widgets"),
+                List.of(
+                    new ColumnDefinition("id", "bigint", NeutralColumnType.INTEGER, true, false),
+                    new ColumnDefinition(
+                        "observed_at", "time(6)", NeutralColumnType.TIME, false, false)),
+                Instant.parse("2026-03-20T00:00:00Z"));
+
+        Chunk chunk =
+            new JdbcPostgresChunkReader()
+                .nextTableChunk(connection, "job-time", schema, null, null, 10)
+                .orElseThrow();
+
+        assertThat(chunk.rows())
+            .singleElement()
+            .satisfies(
+                row ->
+                    assertThat(row.get("observed_at"))
+                        .isEqualTo(LocalTime.of(10, 15, 30, 123_456_000)));
+      }
+    }
+  }
+
+  /**
+   * Covers the source-equivalent key fallback in {@code targetedPrimaryKeyTuples}, which re-queries
+   * per unmatched key so the source decides equality for collated text. Requesting {@code 'A'} must
+   * repair the row stored as {@code 'a'} under a case-insensitive collation, and the chunk must
+   * report the <em>requested</em> literal as matched so the repair is not reported missing.
+   *
+   * <p>Needs a nondeterministic ICU collation: PostgreSQL's default collation is case-sensitive, so
+   * with an ordinary text key the fallback branch is never entered — which is why no existing
+   * Postgres test reached it.
+   */
+  @Test
+  void repairsCollationEquivalentStringPrimaryKeysThroughTheSourceFallback() throws Exception {
+    assumeDockerIsAvailable();
+
+    try (PostgreSQLContainer postgres = LivePostgresTestContainers.newBaseContainer()) {
+      postgres.start();
+      try (Connection connection =
+              DriverManager.getConnection(
+                  postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
+          Statement statement = connection.createStatement()) {
+        configureSqlConnection(connection);
+        statement.execute(
+            "CREATE COLLATION case_insensitive "
+                + "(provider = icu, locale = 'und-u-ks-level2', deterministic = false)");
+        statement.execute(
+            "CREATE TABLE public.collated_widgets "
+                + "(id TEXT COLLATE case_insensitive PRIMARY KEY, name TEXT)");
+        statement.execute("INSERT INTO public.collated_widgets (id, name) VALUES ('a', 'lower a')");
+
+        TableSchema schema =
+            TableSchema.create(
+                new TableId(postgres.getDatabaseName(), "public", "collated_widgets"),
+                List.of(
+                    new ColumnDefinition("id", "text", NeutralColumnType.STRING, true, false),
+                    new ColumnDefinition("name", "text", NeutralColumnType.STRING, false, true)),
+                Instant.parse("2026-03-20T00:00:00Z"));
+
+        Chunk targetedChunk =
+            new JdbcPostgresChunkReader()
+                .targetedPrimaryKeyTuples(
+                    connection,
+                    "job-collation-targeted",
+                    schema,
+                    schema.primaryKeyTuplesFromLiterals(List.of("A")))
+                .orElseThrow();
+
+        assertThat(targetedChunk.rows()).extracting(row -> row.get("id")).containsExactly("a");
+        assertThat(targetedChunk.matchedRequestedPrimaryKeyTuples())
+            .extracting(tuple -> tuple.literal())
+            .containsExactly("A");
+      }
+    }
+  }
+
   @Test
   void readsSupportedTimetzColumnsThroughJdbc() throws Exception {
     assumeDockerIsAvailable();

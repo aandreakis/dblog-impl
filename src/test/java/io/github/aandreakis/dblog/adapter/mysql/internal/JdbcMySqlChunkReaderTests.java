@@ -19,11 +19,51 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.time.Instant;
+import java.time.LocalTime;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
 class JdbcMySqlChunkReaderTests {
+  /**
+   * Connector/J surfaces a {@code TIME(n)} column as {@link java.sql.Time}, which does carry
+   * milliseconds — but {@code java.sql.Time#toLocalTime()} discarded them, so every chunk-read
+   * time-of-day was truncated to a whole second.
+   *
+   * <p>Milliseconds is the correct target here rather than microseconds: {@code
+   * AbstractRowsEventDataDeserializer#deserializeTimeV2} also hands over a {@code java.sql.Time},
+   * so the binlog cannot carry microseconds at all. Reading the chunk side more precisely would
+   * make the snapshot row disagree with the log event for the same row rather than close the gap —
+   * and where {@code TIME} is part of the primary key, such a disagreement hides the in-window
+   * collision and lets the stale snapshot row win. Both paths now meet at the binlog's ceiling; see
+   * {@code MySqlBinlogSessionTests#decodesBinlogTimeValuesIndependentlyOfTheJvmDefaultZone} for the
+   * separate zone-convention half of that agreement.
+   */
+  @Test
+  void readsTimeAtMillisecondPrecision() throws Exception {
+    TableSchema schema = timeSchema();
+    Connection connection = configuredConnection();
+    PreparedStatement statement = mock(PreparedStatement.class);
+    ResultSet resultSet = mock(ResultSet.class);
+    java.sql.Time driverValue = java.sql.Time.valueOf(LocalTime.of(10, 15, 30));
+    driverValue.setTime(driverValue.getTime() + 123);
+
+    when(connection.prepareStatement(MySqlSql.tableChunkReadSql(schema, false, false)))
+        .thenReturn(statement);
+    when(statement.executeQuery()).thenReturn(resultSet);
+    when(resultSet.next()).thenReturn(true, false);
+    when(resultSet.getObject(1)).thenReturn(1L);
+    when(resultSet.getObject(2)).thenReturn(driverValue);
+
+    Chunk chunk =
+        new JdbcMySqlChunkReader()
+            .nextTableChunk(connection, "job-time", schema, null, null, 1)
+            .orElseThrow();
+
+    assertThat(chunk.rows().getFirst())
+        .containsEntry("observed_at", LocalTime.of(10, 15, 30, 123_000_000));
+  }
+
   @Test
   void readsOrderedTableChunkThroughJdbcAndUsesLookaheadForFinalChunk() throws Exception {
     TableSchema schema = schemaWithIgnoredColumn();
@@ -471,6 +511,15 @@ class JdbcMySqlChunkReaderTests {
         List.of(
             new ColumnDefinition("id", "bigint", NeutralColumnType.INTEGER, true, false),
             new ColumnDefinition("occurred_at", "datetime", NeutralColumnType.TIMESTAMP, false, true)),
+        Instant.parse("2026-03-21T00:00:00Z"));
+  }
+
+  private static TableSchema timeSchema() {
+    return TableSchema.create(
+        new TableId("mysql-source", "appdb", "widgets"),
+        List.of(
+            new ColumnDefinition("id", "bigint", NeutralColumnType.INTEGER, true, false),
+            new ColumnDefinition("observed_at", "time(6)", NeutralColumnType.TIME, false, false)),
         Instant.parse("2026-03-21T00:00:00Z"));
   }
 

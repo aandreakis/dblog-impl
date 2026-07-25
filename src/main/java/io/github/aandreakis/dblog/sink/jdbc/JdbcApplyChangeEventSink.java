@@ -633,7 +633,11 @@ public final class JdbcApplyChangeEventSink implements ChangeEventSink, SinkSche
       return;
     }
     if (coercedValue instanceof LocalDateTime localDateTime) {
-      statement.setTimestamp(parameterIndex, Timestamp.valueOf(localDateTime));
+      // Timestamp.valueOf resolves the wall clock through the JVM default zone, so a value inside
+      // a DST gap is silently slid forward an hour. Bind the LocalDateTime itself — same JDBC 4.2
+      // path the LocalTime branch above already uses — so the literal wall clock reaches the
+      // target unchanged.
+      statement.setObject(parameterIndex, localDateTime);
       return;
     }
     if (coercedValue instanceof UUID uuid) {

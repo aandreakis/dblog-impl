@@ -18,6 +18,7 @@ import java.util.BitSet;
 import java.util.HexFormat;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 /**
  * Dialect-free normalization of supported row payload values. Callers that receive raw wire
@@ -26,6 +27,11 @@ import java.util.UUID;
  * pass the decoded form through this normalizer.
  */
 public final class NeutralValueNormalizer {
+  // Precompiled: normalizeOffsetSuffix runs per value on the pgoutput TIMETZ row path, and
+  // String#matches recompiles the pattern on every call.
+  private static final Pattern SHORT_OFFSET_SUFFIX = Pattern.compile(".*[+-]\\d{2}$");
+  private static final Pattern COMPACT_OFFSET_SUFFIX = Pattern.compile(".*[+-]\\d{4}$");
+
   private NeutralValueNormalizer() {}
 
   public static Object normalize(ColumnDefinition column, Object value) {
@@ -102,6 +108,14 @@ public final class NeutralValueNormalizer {
     }
     if (value instanceof BigInteger bigInteger) {
       return new BigDecimal(bigInteger);
+    }
+    if (value instanceof Float floatValue) {
+      // Widening a float to a double first exposes the binary representation error (0.1f becomes
+      // 0.10000000149011612), so a float4 column would normalize differently depending on whether
+      // it arrived as a driver Float on the chunk path or as text on the log path, and in-window
+      // collision suppression would stop matching. Float.toString gives the shortest decimal that
+      // round-trips — the same value the text path parses.
+      return new BigDecimal(Float.toString(floatValue));
     }
     if (value instanceof Number number) {
       return BigDecimal.valueOf(number.doubleValue());
@@ -183,7 +197,11 @@ public final class NeutralValueNormalizer {
       return localTime;
     }
     if (value instanceof java.sql.Time sqlTime) {
-      return sqlTime.toLocalTime();
+      // java.sql.Time#toLocalTime drops the millisecond field outright, so a driver that surfaces
+      // TIME(n) as java.sql.Time would silently lose sub-second precision the log path keeps.
+      // floorMod because the epoch millis are negative for early times in zones ahead of UTC.
+      int milliOfSecond = Math.floorMod(sqlTime.getTime(), 1000);
+      return sqlTime.toLocalTime().withNano(milliOfSecond * 1_000_000);
     }
     if (value instanceof java.util.Date date) {
       return date.toInstant().atOffset(ZoneOffset.UTC).toLocalTime();
@@ -263,10 +281,10 @@ public final class NeutralValueNormalizer {
   }
 
   private static String normalizeOffsetSuffix(String value) {
-    if (value.matches(".*[+-]\\d{2}$")) {
+    if (SHORT_OFFSET_SUFFIX.matcher(value).matches()) {
       return value + ":00";
     }
-    if (value.matches(".*[+-]\\d{4}$")) {
+    if (COMPACT_OFFSET_SUFFIX.matcher(value).matches()) {
       int offsetStart = value.length() - 5;
       return value.substring(0, offsetStart + 3) + ":" + value.substring(offsetStart + 3);
     }

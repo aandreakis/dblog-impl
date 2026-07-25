@@ -164,7 +164,10 @@ public record TableSchema(
   public PrimaryKeyHash primaryKeyHashFor(ImmutableRowImage row) {
     Objects.requireNonNull(row, "row");
     List<ColumnDefinition> primaryKeyDefinitions = primaryKeyDefinitions();
-    if (!supportsDumpPrimaryKeyContract()) {
+    // Reuse the list already fetched above. Calling supportsDumpPrimaryKeyContract() here would
+    // re-enter primaryKeyDefinitions() and take the shared cached-views monitor a second time on
+    // the per-row reconciliation hot path.
+    if (!supportsDumpPrimaryKeyContract(primaryKeyDefinitions)) {
       return null;
     }
     Object[] normalized = new Object[primaryKeyDefinitions.size()];
@@ -347,11 +350,18 @@ public record TableSchema(
    * collapse distinct source values after their offsets are discarded.
    */
   public boolean supportsDumpPrimaryKeyContract() {
-    return primaryKeyDefinitions().stream()
-        .allMatch(
-            definition ->
-                PrimaryKeyValue.isSupportedPrimaryKeyType(definition.neutralType())
-                    && !definition.isTimeWithTimeZone());
+    return supportsDumpPrimaryKeyContract(primaryKeyDefinitions());
+  }
+
+  private static boolean supportsDumpPrimaryKeyContract(
+      List<ColumnDefinition> primaryKeyDefinitions) {
+    for (ColumnDefinition definition : primaryKeyDefinitions) {
+      if (!PrimaryKeyValue.isSupportedPrimaryKeyType(definition.neutralType())
+          || definition.isTimeWithTimeZone()) {
+        return false;
+      }
+    }
+    return true;
   }
 
   /**
