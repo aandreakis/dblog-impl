@@ -5,7 +5,7 @@ implementation in this repository.
 
 If you are trying to get one real sync run working quickly, start with one of
 the canonical demo scripts under `scripts/demo/` (see §7), then use this file
-as the deeper operator reference.
+as the deeper operator guide.
 
 Use this file for:
 
@@ -54,13 +54,13 @@ dblog.source.tables[0]=schema_or_database.table
 **Note on `state-path`:** this is the H2 database-file prefix, not a directory.
 Given `dblog.runtime.state-path=/path/to/state`, H2 writes the data file at
 `/path/to/state.mv.db` and the trace file at `/path/to/state.trace.db`. To
-reset state between runs, remove `/path/to/state*` — `rm -rf /path/to/state`
+reset state between runs, remove `/path/to/state*`. Running `rm -rf /path/to/state`
 (treating it as a directory) leaves the real state file behind. The same
 shape applies to `dblog.scenario.state-path`.
 
 Then add the adapter-specific source properties.
 DBLog also requires at least one explicit sink configuration for `runtime` and
-`startup-check`; it does not auto-install an implicit discard sink.
+`startup-check`. It does not auto-install an implicit discard sink.
 
 ### 2.0 JVM defaults for the packaged container path
 
@@ -109,8 +109,8 @@ Optional MySQL runtime tuning:
 - `dblog.source.mysql.retry-log-connection-loss`
 - `dblog.source.mysql.reconnect-backoff`
 
-DBLog ships no typed TLS configuration. See `docs/adapters/mysql.md` for the full picture
-— in short, the binlog client cannot negotiate TLS, so a server with
+DBLog ships no typed TLS configuration. See `docs/adapters/mysql.md` for the full picture.
+In short, the binlog client cannot negotiate TLS, so a server with
 `require_secure_transport=ON` is unsupported by the shipped DBLog.
 
 ### 2.2 PostgreSQL runtime properties
@@ -147,7 +147,7 @@ Optional PostgreSQL runtime tuning:
 
 DBLog ships no typed TLS configuration. If you need TLS, append the standard pgJDBC
 parameters (`sslmode`, `sslrootcert`, `sslcert`, `sslkey`) to both `jdbc-url` and
-`replication-jdbc-url` directly — see `docs/adapters/postgres.md`.
+`replication-jdbc-url` directly (see `docs/adapters/postgres.md`).
 
 ## 2.3 What a minimal successful startup looks like
 
@@ -165,7 +165,7 @@ For a healthy runtime startup, expect all of the following:
 Fail-fast startup boundary:
 
 - the embedded H2 state-store schema is treated as fixed for the current repo
-  build; DBLog does not perform in-place H2 schema migration or version
+  build. DBLog does not perform in-place H2 schema migration or version
   negotiation.
 
 ## 2.4 Full-table dump scope note
@@ -187,10 +187,10 @@ The DBLog paper names chunk-selection throttling as a production requirement
 for large-table dumps against hot sources. This implementation exposes
 two levers for that today and **does not ship a runtime rate limiter**:
 
-- `chunkSize` — rows per chunk SELECT. Lower values reduce per-SELECT load on
-  the source primary-key index; higher values reduce coordination overhead.
+- `chunkSize`: rows per chunk SELECT. Lower values reduce per-SELECT load on
+  the source primary-key index, while higher values reduce coordination overhead.
   Tune per source, per table family.
-- Process-level start / stop. Killing the DBLog process is safe; chunk-level
+- Process-level start / stop. Killing the DBLog process is safe: chunk-level
   progress is persisted at batch boundaries, so a restart resumes `ACTIVE`
   requests from the last completed chunk without source-side re-reading
   (see `docs/CONTROL_PLANE.md` §8).
@@ -203,7 +203,7 @@ Not present (deliberate):
 - operator pause / resume / cancel endpoints on running requests.
 
 If you need sustained throttling against a hot source, combine a smaller
-`chunkSize` with process restarts (stop the DBLog process during peak hours;
+`chunkSize` with process restarts (stop the DBLog process during peak hours,
 start it again off-peak). A future configuration-level rate limiter would be a
 design decision beyond the current scope of this implementation.
 
@@ -212,7 +212,7 @@ design decision beyond the current scope of this implementation.
 Both live-runtime adapters buffer the full committed transaction in heap before
 handing it to the sink in a single `sink.appendEvents` call. The PostgreSQL
 pgoutput session accumulates events in `PostgresTransactionStreamingSession`'s
-internal transaction buffer until the `COMMIT` message arrives; the MySQL
+internal transaction buffer until the `COMMIT` message arrives, whereas the MySQL
 binlog session does the same between `BEGIN` / `Gtid` and `Xid` / `COMMIT`.
 
 This keeps commit-boundary semantics intact at the sink (downstream target apply
@@ -232,7 +232,7 @@ Empirical measurements against the PostgreSQL adapter on a typical four-column
 
 That works out to roughly **4 KB of retained heap per in-flight `ChangeEvent`**
 under G1 with default settings. Wider rows (long strings, large blobs) push
-this up; narrower rows bring it down. Treat 4 KB/event as an order-of-magnitude
+this up, and narrower rows bring it down. Treat 4 KB/event as an order-of-magnitude
 planning figure, not a guarantee.
 
 ### 2.4.2.2 Sizing rule of thumb
@@ -254,8 +254,8 @@ exhaust the configured heap produces a generic
 `java.lang.OutOfMemoryError: Java heap space` inside the pgoutput decode or
 binlog decode path, the JVM logs the stack, and the runtime exits. Durable
 state persisted before the oversized transaction remains intact (checkpoint,
-dump progress, request status), so a restart on a larger heap — or against a
-source whose oversized workload has completed — resumes cleanly.
+dump progress, request status), so a restart on a larger heap (or against a
+source whose oversized workload has completed) resumes cleanly.
 
 If your workload includes occasional very large transactions (bulk inserts,
 `DELETE FROM ...`, bulk `UPDATE`), either size `-Xmx` for the worst case or
@@ -266,7 +266,7 @@ route those through application-level chunking at the source.
 This implementation is designed as a **single-process CDC
 runtime**. It is not a clustered, multi-instance, leader-elected system, and it
 does not ship a lease, fence token, or takeover protocol. The DBLog paper
-describes an active-passive deployment coordinated by Zookeeper; this
+describes an active-passive deployment coordinated by Zookeeper. This
 implementation intentionally stays within a smaller single-process scope.
 
 What the code does provide:
@@ -309,12 +309,12 @@ external single-instance supervisor. Representative choices:
 - **Docker Swarm / ECS**: single-replica service with a restart policy.
 
 If the supervisor needs to discover the OS-assigned control-plane port (e.g. when
-`dblog.control-plane.port=0`), use `dblog.control-plane.port-file` — see §5.1.
+`dblog.control-plane.port=0`), use `dblog.control-plane.port-file` (see §5.1).
 
 Two instances accidentally pointed at the same source with the same
 `sourceId` produces duplicate events on the sink. The JDBC apply sink is
 idempotent via upsert-on-primary-key and will absorb duplicates at the cost of
-redundant writes; the NDJSON sink is **not** idempotent and will emit both
+redundant writes. The NDJSON sink is **not** idempotent and will emit both
 copies to the output file. If your pipeline downstream of DBLog is not
 idempotent, treat "single live instance per sourceId" as a hard operational
 invariant enforced by the supervisor.
@@ -341,9 +341,9 @@ Current PostgreSQL runtime requirements:
   in `docs/adapters/postgres.md`
 
 **Slot lifecycle is an operator responsibility.** DBLog creates the logical
-replication slot on first run, reuses it across restarts, and never drops it
-— matching Debezium's default posture. A decommissioned DBLog process leaves
-its slot active on the source; without cleanup the server accumulates WAL
+replication slot on first run, reuses it across restarts, and never drops it,
+matching Debezium's default posture. A decommissioned DBLog process leaves
+its slot active on the source. Without cleanup the server accumulates WAL
 indefinitely and will eventually exhaust disk. The `max_slot_wal_keep_size`
 server setting (PG13+) is the recommended safety net. For cleanup procedures,
 health monitoring queries, and the relationship between slot health and the
@@ -379,7 +379,7 @@ dblog.sink.ndjson.path=/path/to/events.ndjson
 #### 4.1.1 Durability characteristics (not production-grade)
 
 The NDJSON sink is intended for **debugging, CDC stream inspection, and local
-demos** — not production event delivery. Its durability guarantees are
+demos**, not production event delivery. Its durability guarantees are
 deliberately thin, and operators who treat the output file as an audit log
 will be surprised.
 
@@ -387,7 +387,7 @@ What DBLog does on write:
 
 - Appends each encoded event followed by `\n` into a `BufferedWriter`.
 - Calls `BufferedWriter.flush()` at the end of every batch. This pushes bytes
-  from the JVM buffer into the operating-system buffer; it does **not** call
+  from the JVM buffer into the operating-system buffer. It does **not** call
   `fsync` on the file descriptor.
 
 What this means in practice:
@@ -399,10 +399,10 @@ What this means in practice:
 - **Kernel crash / power loss**: any OS-buffered events are lost, even if the
   JVM flushed them. DBLog never fsyncs.
 - **Process restart**: the sink opens the target file with
-  `StandardOpenOption.APPEND`. Prior content is preserved; new events are
+  `StandardOpenOption.APPEND`. Prior content is preserved, and new events are
   appended on top. A restart after a crash therefore replays any events that
   were not acknowledged at the source, producing duplicate lines for already-
-  persisted events. This is the documented at-least-once behavior; downstream
+  persisted events. This is the documented at-least-once behavior. Downstream
   consumers are responsible for deduplication if needed.
 - **Long-running processes**: the file grows without bound. There is no
   rotation, size cap, or retention policy. Operators should pipe through
@@ -562,7 +562,7 @@ shape. The caches grow with `table_count × distinct_column_shape_count ×
 statement_kinds` and do not evict. For typical replication flows (a
 fixed set of tables with stable column shapes) the caches stay small. For
 sources with many tables or highly heterogeneous column shapes across events,
-the caches grow without bound — operators who anticipate high cardinality
+the caches grow without bound: operators who anticipate high cardinality
 should budget heap accordingly. This implementation does not bound
 these caches.
 
@@ -610,13 +610,13 @@ single-instance supervisor patterns in §2.5.
 ### 5.1.1 Security posture of the control plane
 
 The shipped control plane has **no built-in authentication or authorization.**
-This is intentional for a study-friendly implementation and relies on
+This is intentional for this implementation and relies on
 an *operator-local access model*:
 
 - The default bind is `127.0.0.1`, which scopes reachability to the host.
 - The packaged Docker compose publishes `127.0.0.1:8085` on the host only.
-- Anyone with host access — local shells, co-located processes, compromised
-  sidecars — can submit dump requests and read all runtime state without a
+- Anyone with host access (local shells, co-located processes, compromised
+  sidecars) can submit dump requests and read all runtime state without a
   credential.
 
 Any deployment that binds beyond loopback is the operator's responsibility to
@@ -624,8 +624,7 @@ front with a reverse proxy (e.g. nginx, Caddy, Envoy, a cloud load balancer)
 that enforces:
 
 1. TLS termination,
-2. authentication (bearer token, mTLS, OIDC — whatever your org already
-   operates),
+2. authentication (bearer token, mTLS, OIDC, or organizational standard),
 3. optional authorization policy per route (e.g. read-only `GET` access for
    monitoring systems, admin access for request mutation endpoints).
 
@@ -674,7 +673,7 @@ Current backpressure visibility:
 ### 5.1.2 Educational tap
 
 > **Never enable the tap in production.** The tap deliberately blocks the
-> DBLog pump thread whenever a subscriber cannot keep up — that is the
+> DBLog pump thread whenever a subscriber cannot keep up: that is the
 > feature's entire purpose and the reason it exists only as a teaching
 > artefact. A slow subscriber will stall CDC for the whole runtime.
 
@@ -687,7 +686,7 @@ dblog.tap.enabled=false
 
 When enabled, the tap mounts `GET /api/v1/tap/stream` (chunked NDJSON,
 one subscriber at a time) on the control plane. The TUI reads events
-from this endpoint; the underlying TCP flow control is what stalls the
+from this endpoint. The underlying TCP flow control is what stalls the
 pump when the subscriber can't keep up (step-mode). The tap route is
 only reachable when the control plane itself is enabled.
 
@@ -722,11 +721,11 @@ Operational response expectations:
 - invalid `PRIMARY_KEYS` literal content that is rejected during submission-time
   schema-aware canonicalization returns `400 bad_request`,
 - invalid `PRIMARY_KEYS` literal content that is only discovered later during
-  runtime binding marks that accepted request `FAILED`; the DBLog runtime
-  itself continues operating,
+  runtime binding marks that accepted request `FAILED` (the DBLog runtime
+  itself continues operating),
 - `TABLE` or `PRIMARY_KEYS` requests that target a table outside the current
-  captured-schema set are marked `FAILED`; the DBLog runtime itself continues
-  operating,
+  captured-schema set are marked `FAILED` (the DBLog runtime itself continues
+  operating),
 - missing state-path / embedded state-store wiring returns service unavailable.
 
 ### 5.3 Lifecycle summary and kill-safe restart
@@ -740,7 +739,7 @@ Current request lifecycle summary:
   type) lands in terminal `FAILED`.
 
 The control plane does not ship operator pause / resume / cancel endpoints.
-To pause ingest, stop the DBLog process; to resume, start it again. The
+To pause ingest, stop the DBLog process. To resume, start it again. The
 embedded state store persists chunk-level progress at batch boundaries, so a
 restart resumes `ACTIVE` requests from the last completed chunk without
 re-reading from the source. `COMPLETED` and `FAILED` requests are unaffected
@@ -773,7 +772,7 @@ runtime treats schema as a selected-column contract:
   than widening the emitted row shape silently.
 
 The selected contract is the set of columns DBLog emits and fingerprints.
-Columns outside that surface are ignored; they do not appear in emitted rows and
+Columns outside that surface are ignored: they do not appear in emitted rows and
 do not change the selected-column fingerprint. An extra supported column added
 after the contract exists is therefore treated like an ignored column if DBLog
 encounters it at a safe inspection boundary.
@@ -1041,8 +1040,7 @@ binary versions should **reset the local state files** for
 `dblog.runtime.state-path` before starting the new binary: remove
 `<state-path>.mv.db` and any `<state-path>.trace.db` / `<state-path>.lock.db`
 files, or use a new state path. Then re-submit any long-running dump requests.
-This matches the study-friendly positioning — for a
-production deployment, run a versioned migration outside DBLog.
+For a production deployment, run a versioned migration outside DBLog.
 
 ### 9.1.2 Source credentials in configuration
 
@@ -1072,11 +1070,11 @@ Use this table as the first-pass operator guide.
 
 | Symptom | Likely cause | Where to look | Operator action |
 | --- | --- | --- | --- |
-| Startup fails before runtime begins | bad credentials, missing table, invalid source prerequisite, or selected-column schema drift against a stored contract | startup logs, implementation spec for the adapter; persisted schema issues if a state store was available | fix source config or source DB state; for contract drift, submit a fresh `ALL_TABLES` dump after the source is trustworthy |
+| Startup fails before runtime begins | bad credentials, missing table, invalid source prerequisite, or selected-column schema drift against a stored contract | startup logs, implementation spec for the adapter, persisted schema issues if a state store was available | fix source config or source DB state. For contract drift, submit a fresh `ALL_TABLES` dump after the source is trustworthy |
 | Control plane is enabled but request submission is unavailable | no active request-processing runtime or unresolved state path | `GET /api/v1/runtime`, request submission message | ensure the process is in the right boot mode and a valid runtime/scenario state path is configured |
 | `runtime/health` is `DOWN` | runtime fail-closed boundary hit | `GET /api/v1/runtime/health`, recent logs | inspect the failure class/message, fix the underlying contract problem, then restart or rerun |
 | `schemaStatus=FULL_DUMP_REQUIRED` | purged history, unresolved schema continuity, or primary-key drift | `GET /api/v1/runtime/schemas`, `GET /api/v1/runtime/schema-issues`, logs | fix the underlying issue, then submit a fresh `ALL_TABLES` dump |
-| `schemaStatus=SCHEMA_UNCERTAIN` persists too long | adapter cannot obtain trustworthy schema or metadata evidence | `runtime/schemas`, `runtime/schema-issues`, recent logs | monitor first; if it does not clear, treat it as a candidate for a fresh full dump |
+| `schemaStatus=SCHEMA_UNCERTAIN` persists too long | adapter cannot obtain trustworthy schema or metadata evidence | `runtime/schemas`, `runtime/schema-issues`, recent logs | monitor first. If it does not clear, treat it as a candidate for a fresh full dump |
 | Target apply keeps retrying | transient target outage or target DB not yet reachable | `runtime/status`, recent logs | restore target availability and wait for retry convergence |
 | Target apply fails hard instead of retrying | target contract breach such as missing schema/table/column or PK mismatch | recent logs, target apply spec | align target schema/privileges/PK contract, then restart or retry |
 | No requests drain after submission | runtime not processing requests or state-path mismatch | `GET /api/v1/requests`, `runtime/status` | confirm request submission path and active runtime state |

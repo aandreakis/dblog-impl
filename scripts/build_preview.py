@@ -122,7 +122,7 @@ def rewrite_target(target: str, current_rel: pathlib.Path, known_md: set[str]) -
     if new_rel is None:
         # File outside the preview set (source code, scripts, archives,
         # config, etc.). Point at the actual repo file via ../-relative
-        # paths — same approach as images. Browsers display plain-text
+        # paths: same approach as images. Browsers display plain-text
         # source files natively, so no wrapper page is needed and the
         # link is genuinely transitive (you can keep navigating the
         # repo through file:// without 404ing on a missing twin).
@@ -267,7 +267,7 @@ PAGE_TEMPLATE = r"""<!DOCTYPE html>
       __CONTENT__
     </div>
   </main>
-  <footer class="tiny">Rendered locally from __SRC__ — derived from the repository's source tree.</footer>
+  <footer class="tiny">Rendered locally from __SRC__, derived from the repository's source tree.</footer>
   __SCRIPTS__
 </body>
 </html>

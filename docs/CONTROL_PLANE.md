@@ -19,7 +19,7 @@ Current shipped scope:
 - source flow-control / backpressure visibility for the live runtime.
 
 The control plane intentionally does not expose `pause`, `resume`, or `cancel`
-endpoints. To pause ingest, stop the DBLog process; to resume, start it again.
+endpoints. To pause ingest, stop the DBLog process. To resume, start it again.
 The embedded state store is crash-safe (see §8), so a restart picks up at the
 last completed chunk without re-reading data from the source.
 
@@ -78,15 +78,15 @@ losing useful operator history:
 - when a `TABLE` or `PRIMARY_KEYS` request reaches `COMPLETED`, every other
   terminal-state (`COMPLETED` or `FAILED`) request that targets the same
   `(databaseName, schemaName, tableName)` and was submitted earlier is pruned
-  from the state store atomically — including any dependent rows in the
-  primary-key, missing-key, and chunk-progress tables;
+  from the state store atomically, including any dependent rows in the
+  primary-key, missing-key, and chunk-progress tables.
 - when an `ALL_TABLES` request reaches `COMPLETED`, every prior terminal-state
-  `ALL_TABLES` request is pruned;
+  `ALL_TABLES` request is pruned.
 - pruning never crosses scope: a `TABLE` completion does not delete prior
-  `ALL_TABLES` history, and vice versa;
-- pruning is gated on `COMPLETED` only — a `FAILED` request never deletes
+  `ALL_TABLES` history, and vice versa.
+- pruning is gated on `COMPLETED` only: a `FAILED` request never deletes
   history. Failures stay visible until a same-scope, same-table successful
-  completion replaces them;
+  completion replaces them.
 - the just-completed request itself is preserved, and `ACTIVE` requests are
   never touched even when their sequence number is older.
 
@@ -100,8 +100,8 @@ completion if you need long-term records.
 HTTP request submission requires:
 
 - request submission to be available from the current runtime,
-- that runtime to have started with an explicit sink configuration; DBLog does
-  not auto-install an implicit discard sink,
+- that runtime to have started with an explicit sink configuration (DBLog does
+  not auto-install an implicit discard sink),
 - an H2 driver on the runtime path,
 - one resolved state path from:
   - `dblog.runtime.state-path`
@@ -158,7 +158,7 @@ Current literal shapes:
   tuple strings such as `(tenant-a,42)`.
 
 Composite literals reserve `\`, `,`, `=`, `{`, and `}`. Prefix a reserved
-character with `\`; write `\\` when the primary-key value contains a literal
+character with `\`. Write `\\` when the primary-key value contains a literal
 backslash. For example, a value `north,west` is written as
 `{external_id=north\,west}`, while `folder\record` is written as
 `{external_id=folder\\record}`. The same escaping rules apply to positional
@@ -209,18 +209,18 @@ Operator-facing event views hide internal watermark/heartbeat activity.
 ### 5.4 Educational tap
 
 > **Never enable the tap in production.** The tap deliberately blocks the
-> DBLog pump thread when the subscriber cannot keep up — that is the entire
+> DBLog pump thread when the subscriber cannot keep up: that is the entire
 > point of the feature. It exists so a separate TUI can visualise the
 > watermark algorithm step by step on a teaching machine. Running it against
 > a real workload will stall CDC under any subscriber slowdown.
 
 When `dblog.tap.enabled=true`, the control plane mounts one extra route:
 
-- `GET /api/v1/tap/stream` — chunked NDJSON. Exactly one subscriber at a
-  time; a new connection displaces any in-flight one (TCP-like last-wins
+- `GET /api/v1/tap/stream`: chunked NDJSON. Exactly one subscriber at a
+  time. A new connection displaces any in-flight one (TCP-like last-wins
   semantics). Pins one executor thread until the subscriber disconnects.
   The subscriber detects the end of the run via socket close. TCP flow
-  control is what stalls the pump when the subscriber can't keep up —
+  control is what stalls the pump when the subscriber can't keep up:
   that is the step-mode mechanism.
 
 The startup WARN means only that the educational tap is enabled. Actual
@@ -237,7 +237,7 @@ tap-induced pump blocking is surfaced separately:
 `/api/v1/runtime/status` `sourceFlowControl.queueDepth` is source-log
 flow-control state, not tap HTTP stream queue health.
 
-Every envelope carries `run_id`; subscribers use it to detect a new run
+Every envelope carries `run_id`. Subscribers use it to detect a new run
 (process restart) without relying on a handshake event.
 
 The route returns `503 tap_not_enabled` when `dblog.tap.enabled=false`.
@@ -257,7 +257,7 @@ The per-kind JSON Schemas under `docs/schema/events/` are the authoritative
 wire contract. The Java event POJOs under
 `src/main/java/io/github/aandreakis/dblog/tap/generated/` are
 generated from those schemas via `./gradlew generateTapSchemaClasses` and
-committed to the repo; the generator is manual-only and deterministic.
+committed to the repo. The generator is manual-only and deterministic.
 External consumers (Rust via `typify`, TypeScript via `quicktype`, etc.)
 point their own codegen at `docs/schema/tap-event.schema.json`, which is
 the `oneOf` union of the per-kind files.
@@ -285,7 +285,7 @@ Every tap event starts with the same six envelope fields in this order:
 | `kind`      | string          | One of the 13 event kinds listed below.                               |
 
 `seq` is monotonically increasing across all non-out-of-band events for a
-given `run_id`; a reader can gap-detect by comparing successive `seq`
+given `run_id`. A reader can gap-detect by comparing successive `seq`
 values. Out-of-band events (`stream.standby`, `stream.resumed`) do not
 consume sequence numbers because they are written directly by the HTTP
 writer thread without passing through the pump's per-batch buffer.
@@ -343,7 +343,7 @@ as follows:
 
 The schema enum also permits `bytes`, reserved for future use. Any
 dispatcher label the tap does not recognise is treated as a runtime
-contract violation — the tap raises `IllegalStateException` rather than
+contract violation: the tap raises `IllegalStateException` rather than
 emitting a wire value that the schema would reject. Adding a new
 dispatcher label therefore requires extending both the switch in
 `ActiveTap#normaliseCheckpointReason` and the reason enum in
@@ -354,12 +354,12 @@ the POJOs.
 
 At-most-once per subscriber. There is a narrow window between
 `queue.poll(...)` and a successful `out.write(...) + out.flush(...)` in
-which a line has been dequeued but not yet written to the socket; if the
+which a line has been dequeued but not yet written to the socket. If the
 client disconnects in that window the line is dropped. A reconnecting
 reader starts from wherever the queue head is at the time of reconnection
 rather than replaying. If an external consumer needs
 exactly-once-per-attached-subscriber delivery in the future, the intended
-fix is a peek-then-commit inversion — design decision deferred until a
+fix is a peek-then-commit inversion: design decision deferred until a
 concrete consumer-side requirement exists.
 
 The feature is source-available only as a teaching artefact and is not
@@ -401,7 +401,7 @@ query parameters, request bodies, and response envelopes.
 DBLog does not expose operator pause/resume/cancel endpoints. The equivalent
 operation is a **process restart**:
 
-- to pause ingest, stop the DBLog process (SIGTERM or SIGKILL — both are safe),
+- to pause ingest, stop the DBLog process (SIGTERM or SIGKILL, both being safe),
 - to resume, start the DBLog process again against the same state path.
 
 The embedded state store persists enough progress at chunk boundaries for a
@@ -409,7 +409,7 @@ fresh process to resume where the previous one stopped:
 
 - stream checkpoints are flushed at batch boundaries, so streaming resumes from
   the last acknowledged source position rather than from the start,
-- in-flight dumps resume at the last completed chunk; rows already emitted are
+- in-flight dumps resume at the last completed chunk. Rows already emitted are
   not re-emitted from the source, and the reconciliation algorithm still holds
   because low/high watermark rows sit in the ordinary source log,
 - requests that were `ACTIVE` at the moment of the kill remain `ACTIVE` in the

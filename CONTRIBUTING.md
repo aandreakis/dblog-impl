@@ -1,6 +1,6 @@
 # Contributing
 
-This repository is published as a reference implementation under the MIT license and is intentionally low-maintenance.
+This repository is published under the MIT license and is intentionally low-maintenance.
 
 To keep the scope small and the semantics stable, it is **not accepting** feature requests, feature pull requests, roadmap asks, or support requests. Issues or pull requests of that shape may be closed without review.
 
@@ -22,4 +22,4 @@ By submitting a contribution, you confirm that:
 - you are allowed to license it under the repository license (MIT)
 - you understand it may be ignored, declined, or closed without further discussion
 
-For anything larger — new source adapters, new sink kinds, HA, or other features — please fork.
+For larger changes (such as new source adapters, new sink kinds, HA, or other features), please fork.

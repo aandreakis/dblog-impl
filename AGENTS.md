@@ -8,7 +8,7 @@ boundaries.
 
 ## Project identity
 
-This is a Java 21 reference implementation of the DBLog watermark-based
+This is a Java 21 implementation of the DBLog watermark-based
 change-data-capture algorithm, built from public material: the
 [DBLog paper](https://arxiv.org/abs/2010.12597) and the
 [Netflix Technology Blog post](https://netflixtechblog.com/dblog-a-generic-change-data-capture-framework-69351fb9099b).
@@ -16,10 +16,10 @@ change-data-capture algorithm, built from public material: the
 Public positioning: preserve the README's current attribution and provenance
 choices. Do not add, remove, or reframe personal attribution unless the
 maintainer explicitly asks. Keep the README clear that this is an independent
-reference implementation built from public materials, not Netflix's production
+implementation built from public materials, not Netflix's production
 DBLog.
 
-Treat it as a compact executable reference, not as Netflix's production DBLog
+Treat it as a compact executable model, not as Netflix's production DBLog
 and not as a general-purpose CDC product.
 
 Use code and tests as the source of truth. Docs explain intended behavior, but
@@ -32,7 +32,7 @@ Current scope:
 - NDJSON, H2 inspection, JDBC target-apply, and explicit no-op sinks
 - Embedded H2 runtime state
 - Single-process, single-host runtime
-- Local HTTP control plane: loopback (`127.0.0.1`) by default; non-loopback
+- Local HTTP control plane: loopback (`127.0.0.1`) by default. Non-loopback
   binds require explicit opt-in and are intended only for containerized examples
   that publish loopback on the host
 
@@ -48,12 +48,12 @@ Out of scope by design:
 DBLog lets a live CDC stream continue while a table is copied in bounded chunks.
 For each chunk:
 
-1. write a low watermark into source metadata;
-2. read a bounded primary-key chunk;
-3. write a high watermark;
-4. pass through committed log events while the window is open;
+1. write a low watermark into source metadata.
+2. read a bounded primary-key chunk.
+3. write a high watermark.
+4. pass through committed log events while the window is open.
 5. drop any selected chunk row whose same-table primary key appears in the
-   in-window log, because the log event is fresher;
+   in-window log, because the log event is fresher.
 6. when the high watermark appears, emit the remaining chunk rows, persist the
    completed chunk boundary, and only then allow the source checkpoint to move.
 
@@ -126,7 +126,7 @@ Documentation map:
 
 ## Commands agents should know
 
-Prefer the narrowest relevant verification first; broaden only when the changed
+Prefer the narrowest relevant verification first. Broaden only when the changed
 behavior crosses runtime, adapter, recovery, or source-version boundaries.
 
 ```bash
@@ -135,12 +135,12 @@ behavior crosses runtime, adapter, recovery, or source-version boundaries.
 ./gradlew e2eTest              # non-Docker inspection-mode e2e tests
 ./gradlew integrationTestDocker # Docker-backed adapter scenarios
 ./gradlew e2eTestDocker        # live Docker convergence/repair scenarios
-./gradlew compatibilityMatrix  # source-image matrix; slower
+./gradlew compatibilityMatrix  # source-image matrix (slower)
 ```
 
 Each lane writes JUnit XML to `build/test-results/<lane>/` and HTML to
 `build/reports/tests/<lane>/`. When triaging a specific lane, navigate to the
-matching directory — `build/reports/tests/test/` covers unit tests only and
+matching directory: `build/reports/tests/test/` covers unit tests only and
 will not contain Docker-lane results.
 
 Demos:
@@ -154,7 +154,7 @@ python3 scripts/demo/postgres_to_mysql.py
 When running Python demos or Docker-backed verification, clean up only Docker
 resources clearly started by your own run, and report any fixtures left running.
 Do not use broad cleanup commands such as `docker system prune`. The Python demos
-normally stop their isolated fixture stack on exit; manually started
+normally stop their isolated fixture stack on exit. Manually started
 `ops/docker` stacks can be stopped with
 `docker compose -f ops/docker/compose.yml down -v --remove-orphans`.
 
@@ -163,11 +163,11 @@ normally stop their isolated fixture stack on exit; manually started
 | Demo | Final stdout line | Mid-run markers | Log file |
 |---|---|---|---|
 | `mysql_to_postgres.py` | `Demo succeeded.` | `Initial dump converged.`, `Live changes converged.` | `build/demo/mysql_to_postgres/runtime.log` |
-| `mysql_to_ndjson.py` | `Demo succeeded.` | none — convergence is the NDJSON event file reaching the expected line count | `build/demo/mysql_to_ndjson/runtime.log` |
+| `mysql_to_ndjson.py` | `Demo succeeded.` | none (convergence is the NDJSON event file reaching the expected line count) | `build/demo/mysql_to_ndjson/runtime.log` |
 | `postgres_to_mysql.py` | `Demo succeeded.` | `Initial dump converged.`, `Live changes converged.` | `build/demo/postgres_to_mysql/runtime.log` |
 
 All three exit `0` on success. A non-zero exit means the demo's own
-assertions failed; quote the error verbatim and the tail of the runtime log
+assertions failed. Quote the error verbatim and the tail of the runtime log
 rather than paraphrasing.
 
 Agent sandbox note: in restricted sandboxes, Python demo port probing can fail
@@ -191,14 +191,14 @@ skipped. Do not imply that Docker-backed verification ran unless it did.
 
 These are correctness boundaries, not incidental implementation details:
 
-- Watermark rows in `dblog_meta.watermarks` bracket chunk reads; do not remove,
+- Watermark rows in `dblog_meta.watermarks` bracket chunk reads. Do not remove,
   bypass, or replace them with client-side markers.
 - `dblog_meta.heartbeats` exists to keep log progress observable during idle
-  periods; do not treat it as decorative metadata.
+  periods. Do not treat it as decorative metadata.
 - During an open watermark window, log events pass through in source order and
   win over selected chunk rows with the same table + primary key.
-- Completed chunk progress is durable only at completed chunk boundaries;
-  incomplete chunks retry after restart.
+- Completed chunk progress is durable only at completed chunk boundaries.
+  Incomplete chunks retry after restart.
 - Source checkpoints advance only after local recovery state is durable.
 - Targeted primary-key repair must use the same watermark-window machinery as
   ordinary chunk dumps.
@@ -206,11 +206,11 @@ These are correctness boundaries, not incidental implementation details:
   not from every live column.
 - Unsupported primary-key type rejection happens during dump/repair orchestration,
   not at `TableSchema.create(...)`.
-- The buffered checkpoint flush policy is OR over event count and elapsed time;
-  source-side acknowledgements are coalesced.
+- The buffered checkpoint flush policy is OR over event count and elapsed time.
+  Source-side acknowledgements are coalesced.
 - Non-additive schema changes fail closed. This is stated semantics, not a bug.
 - The control plane is submit/query only. There are no pause, resume, or cancel
-  endpoints; stop/start is the operator mechanism.
+  endpoints. Stop/start is the operator mechanism.
 
 ## Change policy for agents
 
@@ -234,7 +234,7 @@ Do not:
 - Convert the repository into a support channel or roadmap document.
 - Relax fail-closed schema behavior to make a demo pass.
 - Claim this is Netflix production code or that Netflix endorses it.
-- Give legal conclusions about patents; point to [PATENTS.md](PATENTS.md) and
+- Give legal conclusions about patents. Point to [PATENTS.md](PATENTS.md) and
   [NOTICE](NOTICE) instead.
 - Edit license, patent, or provenance language casually.
 
@@ -246,7 +246,7 @@ Do not:
 | Add another source database | Do not implement in this repository. Explain that new source families are outside scope and suggest a fork. |
 | Add HA, leader election, distributed state, leases, or takeover | Do not implement in this repository. Explain that the runtime is single-host by design. |
 | Add online DDL replay or schema-history support | Do not implement in this repository. Explain that schema changes fail closed by design. |
-| Add pause, resume, or cancel endpoints | Do not implement. The control plane is submit/query only; stop/start is the operator mechanism. |
+| Add pause, resume, or cancel endpoints | Do not implement. The control plane is submit/query only. Stop/start is the operator mechanism. |
 | Ask for a feature, integration, refactor, cleanup, or local customization | Recommend a fork rather than a PR. This repo is not seeking feature or broad improvement PRs. |
 | Report a concrete reproducible bug in current scope | Investigate, keep the fix narrow, add focused verification, and mention that a small bug-fix PR may be appropriate. |
 | Ask for operational support | Point to docs and clarify that support requests are outside scope. |
@@ -270,15 +270,15 @@ recommend a fork rather than a PR.
 
 The README is the public landing page. Keep it:
 
-- short enough to skim;
-- clear about DBLog's essence without reproducing the paper;
+- short enough to skim.
+- clear about DBLog's essence without reproducing the paper.
 - preserve the README's current attribution and provenance choices unless the
-  maintainer explicitly asks for a change;
+  maintainer explicitly asks for a change.
 - preserve non-affiliation and provenance clarity without letting it dominate the
-  opening;
+  opening.
 - firm but calm about low maintenance: bug fixes may be considered, feature
-  requests and support requests are out of scope;
-- avoid turning the README into support, roadmap, or product copy;
+  requests and support requests are out of scope.
+- avoid turning the README into support, roadmap, or product copy.
 - link-heavy for details: paper, blog post, PAPER_MAP, OPERATION, CONTROL_PLANE,
   adapter docs, Hydroscope, CONTRIBUTING.
 
@@ -296,17 +296,17 @@ The README is the public landing page. Keep it:
 ## Dependency and style notes
 
 - Java code targets Java 21 and uses Gradle.
-- Prefer source-neutral core logic under `core/`; keep vendor-specific logic under
+- Prefer source-neutral core logic under `core/`. Keep vendor-specific logic under
   `adapter/mysql` or `adapter/postgres`.
 - Keep state interfaces in `state/api` and H2-specific implementation details in
   `state/h2` or `state/jdbc`.
 - Avoid broad refactors that obscure the paper-to-code audit path.
 - Use precise names around source positions, checkpoints, watermarks, selected
-  rows, and emitted log events; many bugs in CDC systems are ordering bugs.
+  rows, and emitted log events. Many bugs in CDC systems are ordering bugs.
 
 ## License and patent note
 
-Released under the **MIT License**. [LICENSE](LICENSE) is normative; this file is
+Released under the **MIT License**. [LICENSE](LICENSE) is normative. This file is
 not.
 
 The repository provides no support, maintenance, warranty, or third-party patent

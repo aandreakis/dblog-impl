@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Hydroscope — DBLog tap TUI documentation</title>
+<title>Hydroscope: DBLog tap TUI documentation</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="description" content="Documentation for Hydroscope, the terminal UI for observing a DBLog change-data-capture tap.">
 <link rel="canonical" href="https://aandreakis.github.io/dblog-impl/ops/tap-tui/docs/">
@@ -157,7 +157,7 @@
     background: var(--panel);
   }
   .shot img { display: block; width: 100%; height: auto; }
-  /* First-column code in any reference table should never wrap — flag
+  /* First-column code in any table should never wrap: flag
      names like `--scenario <name>` and scenario ids like
      `chunk42-standby` need to stay on one line. */
   table td:first-child code { white-space: nowrap; }
@@ -249,9 +249,9 @@
 
 <header class="hero">
   <h1>Hydroscope</h1>
-  <p class="tag">DBLog tap TUI — a live, watermark-level view of chunked CDC reconciliation.</p>
+  <p class="tag">DBLog tap TUI: a live, watermark-level view of chunked CDC reconciliation.</p>
   <div class="hero-media">
-    <img src="img/hero.gif" alt="Hydroscope running the showcase scenario — 12 seconds of chunk lifecycles">
+    <img src="img/hero.gif" alt="Hydroscope running the showcase scenario: 12 seconds of chunk lifecycles">
   </div>
   <p class="hero-note">~12 seconds of <code>--scenario showcase</code> at 120&nbsp;ms/event.</p>
 </header>
@@ -263,7 +263,7 @@
   <ol>
     <li><a href="#what">What you are looking at</a></li>
     <li><a href="#build">Build</a></li>
-    <li><a href="#run">Run — demos &amp; live</a></li>
+    <li><a href="#run">Run: demos &amp; live</a></li>
     <li><a href="#config">Configuration (flags)</a></li>
     <li><a href="#keys">Runtime keys</a></li>
     <li><a href="#anatomy">UI anatomy</a></li>
@@ -277,8 +277,8 @@
 <p>
   DBLog bootstraps a consistent copy of a table with a snapshot that takes
   rows <em>in small chunks</em>, interleaved with the live CDC stream.
-  Each chunk is bracketed by a pair of watermarks — <b>LW</b> (low
-  watermark) and <b>HW</b> (high watermark) — written to and read back
+  Each chunk is bracketed by a pair of watermarks (<b>LW</b> for low
+  watermark and <b>HW</b> for high watermark), written to and read back
   from the log itself. Any log event that arrives <em>between</em> LW and
   HW touching a pk the chunk selected wins over the snapshot: the log
   version is newer, the snapshot row is dropped from the refresh emit.
@@ -294,7 +294,7 @@
 
 <div class="warn">
   <b>Never enable the tap in production.</b> The tap deliberately blocks
-  the DBLog pump when the subscriber can't keep up — that's the whole
+  the DBLog pump when the subscriber can't keep up. That's the whole
   point. Teaching machines only.
 </div>
 
@@ -305,7 +305,7 @@ cargo build --release --bin hydroscope</pre>
 
 <p>Output: <code>target/release/hydroscope</code>. A single binary, no runtime dependencies beyond libc.</p>
 
-<h2 id="run">Run — demos &amp; live</h2>
+<h2 id="run">Run: demos &amp; live</h2>
 
 <h3>Offline / demo mode</h3>
 
@@ -333,9 +333,9 @@ target/release/hydroscope --demo                     <span style="color:var(--fg
 target/release/hydroscope --url http://host:port/api/v1/tap/stream</pre>
 
 <p>
-  Requires the tap to be enabled in the DBLog runtime — see
+  Requires the tap to be enabled in the DBLog runtime (see
   <code>docs/OPERATION.md § 5.1.2</code> and
-  <code>docs/CONTROL_PLANE.md § 5.4</code> in the main repo.
+  <code>docs/CONTROL_PLANE.md § 5.4</code> in the main repo).
   <code>503 tap_not_enabled</code> surfaces as a clear disconnect banner
   with reconnect backoff. Run-id changes (process restart on the DBLog
   side) reset UI state.
@@ -350,7 +350,7 @@ target/release/hydroscope --url http://host:port/api/v1/tap/stream</pre>
   <tbody>
     <tr>
       <td><code>--scenario &lt;name&gt;</code></td>
-      <td>—</td>
+      <td>none</td>
       <td><code>chunk42</code>, <code>chunk42-standby</code>, <code>showcase</code></td>
     </tr>
     <tr>
@@ -366,7 +366,7 @@ target/release/hydroscope --url http://host:port/api/v1/tap/stream</pre>
     <tr>
       <td><code>--step</code></td>
       <td>off</td>
-      <td>Start in step mode — one event per <kbd>space</kbd>.</td>
+      <td>Start in step mode: one event per <kbd>space</kbd>.</td>
     </tr>
     <tr>
       <td><code>--url &lt;URL&gt;</code></td>
@@ -382,7 +382,7 @@ target/release/hydroscope --url http://host:port/api/v1/tap/stream</pre>
   <thead><tr><th>Key</th><th>Effect</th></tr></thead>
   <tbody>
     <tr><td><kbd>q</kbd> · <kbd>Esc</kbd> · <kbd>Ctrl</kbd>+<kbd>C</kbd></td><td>Quit</td></tr>
-    <tr><td><kbd>space</kbd></td><td>In step mode, advance one event; otherwise enter step mode.</td></tr>
+    <tr><td><kbd>space</kbd></td><td>In step mode, advance one event. Otherwise enter step mode.</td></tr>
     <tr><td><kbd>s</kbd></td><td>Toggle step mode</td></tr>
     <tr><td><kbd>n</kbd></td><td>Slow down by 100&nbsp;ms</td></tr>
     <tr><td><kbd>m</kbd></td><td>Speed up by 100&nbsp;ms (clamped to 0)</td></tr>
@@ -396,7 +396,7 @@ target/release/hydroscope --url http://host:port/api/v1/tap/stream</pre>
 
 <p>
   The screen is split 72% / 28% horizontally. Left column stacks
-  <b>SOURCE LOG</b> (top) and <b>SINK STREAM</b> (bottom); right column
+  <b>SOURCE LOG</b> (top) and <b>SINK STREAM</b> (bottom). The right column
   is the <b>RECONCILER</b> sidebar. Six distinct areas, each shown
   below at its actual rendered size so you can read the content:
 </p>
@@ -415,7 +415,7 @@ target/release/hydroscope --url http://host:port/api/v1/tap/stream</pre>
     <span class="chip yellow">OPEN</span> LW received, HW pending ·
     <span class="chip blue">CLOSING</span> HW received, chunk not yet <code>completed</code> ·
     <span class="chip cyan">SELECTED</span> chunk selected but LW still pending ·
-    <span class="chip">—</span> no chunk active.
+    <span class="chip">none</span> no chunk active.
   </p>
 </div>
 
@@ -433,7 +433,7 @@ target/release/hydroscope --url http://host:port/api/v1/tap/stream</pre>
     <span class="chip yellow">⚠ STANDBY</span> and
     <span class="chip red">✗ ERROR</span> /
     <span class="chip red">⚠ DISCONNECTED</span> are the attention
-    states — DISCONNECTED also shows uptime so you know how long we've
+    states. DISCONNECTED also shows uptime so you know how long we've
     been retrying.
   </p>
 </div>
@@ -441,7 +441,7 @@ target/release/hydroscope --url http://host:port/api/v1/tap/stream</pre>
 <div class="anat-section">
   <h3>Source log</h3>
   <div class="loc">top-left pane · 50% of the left column</div>
-  <div class="shot"><img src="img/anat_sourcelog.png" alt="Source log table with seq, LSN, op, table/pk, kind, note columns — showing wm-written, chunk-sel, cdc, and wm-received rows"></div>
+  <div class="shot"><img src="img/anat_sourcelog.png" alt="Source log table with seq, LSN, op, table/pk, kind, note columns, showing wm-written, chunk-sel, cdc, and wm-received rows"></div>
   <p>
     Every tap event in the order it arrived. Columns:
     <code>seq</code>, <code>t</code> (relative to first event),
@@ -455,12 +455,12 @@ target/release/hydroscope --url http://host:port/api/v1/tap/stream</pre>
     <a href="#colors">semantics below</a>.
   </p>
   <p>
-    <code>checkpoint.advanced</code> events are producer-side bookkeeping
-    — the TUI accepts them on the wire but intentionally drops them, so
+    <code>checkpoint.advanced</code> events are producer-side bookkeeping.
+    The TUI accepts them on the wire but intentionally drops them, so
     the source log stays focused on what drives the reconciler.
   </p>
   <p>
-    Strictly wire-derived — no cross-referencing between event streams.
+    Strictly wire-derived: no cross-referencing between event streams.
     A collision surfaces as its own <code>chunk-drop</code> row on
     arrival.
   </p>
@@ -469,7 +469,7 @@ target/release/hydroscope --url http://host:port/api/v1/tap/stream</pre>
 <div class="anat-section">
   <h3>Sink stream</h3>
   <div class="loc">bottom-left pane · 50% of the left column</div>
-  <div class="shot"><img src="img/anat_sinkstream.png" alt="Sink stream table with seq, t, LSN, op, table, pk, origin, badge columns — LOG and SELECT origins"></div>
+  <div class="shot"><img src="img/anat_sinkstream.png" alt="Sink stream table with seq, t, LSN, op, table, pk, origin, badge columns for LOG and SELECT origins"></div>
   <p>
     What downstream consumers see after reconciliation. Columns:
     <code>seq</code>, <code>t</code>, <code>LSN</code>, <code>op</code>,
@@ -480,8 +480,8 @@ target/release/hydroscope --url http://host:port/api/v1/tap/stream</pre>
     <span class="chip blue">LOG</span> = CDC passthrough ·
     <span class="chip cyan">SELECT</span> = snapshot refresh row
     emitted on <code>HW</code>. Badge surfaces the in-window chunk id
-    for LOG rows that landed inside a watermark window; it's empty
-    otherwise (including for SELECT rows — the origin already says
+    for LOG rows that landed inside a watermark window, and is empty
+    otherwise (including for SELECT rows, as the origin already says
     "snapshot refresh", and the active dump id is on the reconciler
     sidebar).
   </p>
@@ -498,18 +498,18 @@ target/release/hydroscope --url http://host:port/api/v1/tap/stream</pre>
         algorithm time-order:
       </p>
       <ol style="margin:0 0 10px 18px; padding:0;">
-        <li><code>pk&nbsp;[lo&nbsp;…&nbsp;hi]</code> — chunk's pk range</li>
-        <li><code>req</code> / <code>dump</code> — request + dump identity</li>
-        <li><code>▼&nbsp;LW</code> — low-watermark token, LSN, latency</li>
-        <li><code>in-window cdc</code> — collisions listed (up to 3), passthrough count</li>
-        <li><code>chunk buffer</code> — pk range visualisation, excluded pks <span style="text-decoration:line-through;color:var(--yellow)">crossed out</span></li>
-        <li><code>excluded (log won)</code> — up to 6 excluded pks one-per-line</li>
-        <li><code>△&nbsp;HW</code> — high-watermark token, LSN, latency</li>
-        <li><code>emit-ready</code> — refresh row count waiting on HW</li>
-        <li>metadata footer — <code>after</code> / <code>final</code> / <code>fp</code></li>
+        <li><code>pk&nbsp;[lo&nbsp;…&nbsp;hi]</code>: chunk's pk range</li>
+        <li><code>req</code> / <code>dump</code>: request + dump identity</li>
+        <li><code>▼&nbsp;LW</code>: low-watermark token, LSN, latency</li>
+        <li><code>in-window cdc</code>: collisions listed (up to 3), passthrough count</li>
+        <li><code>chunk buffer</code>: pk range visualisation, excluded pks <span style="text-decoration:line-through;color:var(--yellow)">crossed out</span></li>
+        <li><code>excluded (log won)</code>: up to 6 excluded pks one-per-line</li>
+        <li><code>△&nbsp;HW</code>: high-watermark token, LSN, latency</li>
+        <li><code>emit-ready</code>: refresh row count waiting on HW</li>
+        <li>metadata footer: <code>after</code> / <code>final</code> / <code>fp</code></li>
       </ol>
       <p>
-        Fixed-width sidebar — doesn't collapse or resize when the chunk
+        Fixed-width sidebar: doesn't collapse or resize when the chunk
         lifecycle advances, so the source/sink panels stay visually
         anchored.
       </p>
@@ -523,7 +523,7 @@ target/release/hydroscope --url http://host:port/api/v1/tap/stream</pre>
   <div class="shot"><img src="img/anat_footer.png" alt="Footer showing keyboard shortcuts: q quit, space step/advance, s toggle step, n/m pace, f full speed"></div>
   <p>
     Keyboard shortcuts cheatsheet. See
-    <a href="#keys">Runtime keys</a> for the full reference.
+    <a href="#keys">Runtime keys</a> for the full list.
   </p>
 </div>
 
@@ -533,11 +533,11 @@ target/release/hydroscope --url http://host:port/api/v1/tap/stream</pre>
 
 <table>
   <tbody>
-    <tr><td><span class="chip blue">BLUE</span></td>  <td>flowing / complete / healthy — CDC events, connected, LW received, HW on closed chunk</td></tr>
-    <tr><td><span class="chip yellow">YELLOW</span></td><td>anomaly / pending — collision triggers, HW pending, standby, excluded pk</td></tr>
-    <tr><td><span class="chip cyan">CYAN</span></td>   <td>process state — sink <code>origin=SELECT</code>, request lifecycle</td></tr>
-    <tr><td><span class="chip red">RED</span></td>     <td>hard signal — LW marker, error, disconnected banner</td></tr>
-    <tr><td><span class="chip">gray / dim</span></td>  <td>chrome and orientation — labels, placeholders, "no data yet"</td></tr>
+    <tr><td><span class="chip blue">BLUE</span></td>  <td>flowing / complete / healthy: CDC events, connected, LW received, HW on closed chunk</td></tr>
+    <tr><td><span class="chip yellow">YELLOW</span></td><td>anomaly / pending: collision triggers, HW pending, standby, excluded pk</td></tr>
+    <tr><td><span class="chip cyan">CYAN</span></td>   <td>process state: sink <code>origin=SELECT</code>, request lifecycle</td></tr>
+    <tr><td><span class="chip red">RED</span></td>     <td>hard signal: LW marker, error, disconnected banner</td></tr>
+    <tr><td><span class="chip">gray / dim</span></td>  <td>chrome and orientation: labels, placeholders, "no data yet"</td></tr>
   </tbody>
 </table>
 
@@ -556,7 +556,7 @@ target/release/hydroscope --url http://host:port/api/v1/tap/stream</pre>
     <tr>
       <td><code>chunk42-standby</code></td>
       <td>Finite</td>
-      <td><code>chunk42</code> plus a <code>stream.standby</code> / <code>stream.resumed</code> pair at the tail — exercises the backpressure banner.</td>
+      <td><code>chunk42</code> plus a <code>stream.standby</code> / <code>stream.resumed</code> pair at the tail, exercising the backpressure banner.</td>
     </tr>
     <tr>
       <td><code>showcase</code></td>
@@ -571,12 +571,12 @@ target/release/hydroscope --url http://host:port/api/v1/tap/stream</pre>
 <ol>
   <li>Pre-request warmup: heartbeat + plain CDC + checkpoint</li>
   <li>Request 42 submitted (scope <code>TABLE</code>, <code>app.orders</code>) → <code>ACTIVE</code></li>
-  <li><b>Chunk 1</b> — 15 rows, 0 collisions (happy path)</li>
+  <li><b>Chunk 1</b>: 15 rows, 0 collisions (baseline pass)</li>
   <li>Plain-CDC gap (DELETE + INSERT outside any window)</li>
-  <li><b>Chunk 2</b> — 15 rows, <b>3 collisions</b> (one is a DELETE hit)</li>
+  <li><b>Chunk 2</b>: 15 rows, <b>3 collisions</b> (one is a DELETE hit)</li>
   <li><code>stream.standby</code> + <code>stream.resumed</code> (backpressure interlude)</li>
-  <li><b>Chunk 3</b> — 20 rows, <b>5 collisions</b> (heavy contention)</li>
-  <li><b>Chunk 4</b> — 8 rows, 1 collision, <code>final_chunk=true</code></li>
+  <li><b>Chunk 3</b>: 20 rows, <b>5 collisions</b> (heavy contention)</li>
+  <li><b>Chunk 4</b>: 8 rows, 1 collision, <code>final_chunk=true</code></li>
   <li>Request 42 <code>COMPLETED</code></li>
   <li>Post-request plain CDC</li>
   <li>An <code>error</code> event (<code>WatermarkSequenceException</code>, non-fatal)</li>
@@ -585,9 +585,9 @@ target/release/hydroscope --url http://host:port/api/v1/tap/stream</pre>
 
 <p>
   After the intro, the continuous loop emits deterministic
-  (xorshift-seeded) random traffic — plain CDC bursts, chunks of 10–30
-  rows with 0–5 collisions each, heartbeats, checkpoints, occasional
-  standby pairs and non-fatal errors — until you quit.
+  (xorshift-seeded) random traffic: plain CDC bursts, chunks of 10-30
+  rows with 0-5 collisions each, heartbeats, checkpoints, occasional
+  standby pairs, and non-fatal errors until you quit.
 </p>
 
 <div class="note">

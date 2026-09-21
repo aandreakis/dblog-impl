@@ -1,4 +1,4 @@
-# DBLog TUI — Hydroscope
+# DBLog TUI: Hydroscope
 
 Rust/ratatui consumer for the DBLog educational observability tap.
 Renders the watermark-based chunked-CDC algorithm live: source tap
@@ -44,7 +44,7 @@ so the UI rendering path is identical.
 
 | scenario            | shape                                                                                                        |
 |---------------------|--------------------------------------------------------------------------------------------------------------|
-| `chunk42`           | **Finite.** Single chunk, 2 collisions, 38 refresh rows. Good for the first-time tour; ~65 events. Default when you pass `--demo`. |
+| `chunk42`           | **Finite.** Single chunk, 2 collisions, 38 refresh rows. Good introductory scenario (~65 events). Default when you pass `--demo`. |
 | `chunk42-standby`   | **Finite.** `chunk42` plus a `stream.standby` + `stream.resumed` pair at the tail.                           |
 | `chunk42-long`      | **Finite.** `chunk42` with fully-qualified table names and composite primary-key literals for layout stress. |
 | `showcase`          | **Infinite.** Scripted intro (4 chunks, increasing contention, standby, final-chunk + request COMPLETED) followed by procedural continuous traffic that keeps going until you quit. Default pace: 100 ms/event. |
@@ -54,12 +54,12 @@ The `showcase` intro walks through, in order:
 
 1. Pre-request warmup: heartbeat + plain CDC + a checkpoint
 2. Request 42 submitted (scope TABLE, app.orders) → ACTIVE
-3. **Chunk 1** — 15 rows, 0 collisions (the happy path; no exclusions)
+3. **Chunk 1**: 15 rows, 0 collisions (baseline pass without exclusions)
 4. Plain-CDC gap with a DELETE and an INSERT
-5. **Chunk 2** — 15 rows, **3 collisions** (including one DELETE hit)
+5. **Chunk 2**: 15 rows, **3 collisions** (including one DELETE hit)
 6. `stream.standby` + `stream.resumed` (backpressure interlude)
-7. **Chunk 3** — 20 rows, **5 collisions** (heavy contention)
-8. **Chunk 4** — 8 rows, 1 collision, `final_chunk=true`
+7. **Chunk 3**: 20 rows, **5 collisions** (heavy contention)
+8. **Chunk 4**: 8 rows, 1 collision, `final_chunk=true`
 9. Request 42 COMPLETED
 10. Post-request plain CDC
 11. Final heartbeat before the continuous loop starts
@@ -73,10 +73,10 @@ replays are reproducible.
 ### Running the demos
 
 ```
-# Infinite, realistic demo — what you want for an open-ended session
+# Infinite demo for an open-ended session
 target/release/hydroscope --scenario showcase
 
-# Finite single-chunk teaching scenario — the algorithm's "hello world"
+# Finite single-chunk teaching scenario: the core algorithm in miniature
 target/release/hydroscope --scenario chunk42
 
 # chunk42 with a standby pair at the tail
@@ -121,10 +121,10 @@ target/release/hydroscope --url http://host:port/api/v1/tap/stream
 reconnect backoff. Run-id changes (process restart) reset UI state.
 
 > **Never enable the tap in production.** The tap deliberately blocks
-> the DBLog pump when the subscriber can't keep up — that's the whole
+> the DBLog pump when the subscriber can't keep up. That is the whole
 > point. Teaching machines only.
 
-## Pacing — "slow events so the eye can keep up"
+## Pacing: event rate control
 
 The tap is TCP-flow-controlled, so a slow reader backpressures DBLog.
 The pacer is the reader-side throttle.
@@ -133,10 +133,10 @@ The pacer is the reader-side throttle.
 
 | flag                  | default (demo / live)             | effect                                               |
 |-----------------------|-----------------------------------|------------------------------------------------------|
-| `--scenario <name>`   | —                                 | `chunk42` \| `chunk42-standby` \| `chunk42-long` \| `showcase` \| `showcase-long` |
+| `--scenario <name>`   | none                              | `chunk42` \| `chunk42-standby` \| `chunk42-long` \| `showcase` \| `showcase-long` |
 | `--demo`              | off                               | shorthand for `--scenario chunk42`                   |
-| `--slowdown <ms>`     | 100 (showcase) / 350 (chunk42) / 0 (live) | sleep N ms between events; higher = slower   |
-| `--step`              | off                               | start in step mode — one event per `space` keypress  |
+| `--slowdown <ms>`     | 100 (showcase) / 350 (chunk42) / 0 (live) | sleep N ms between events (higher = slower)   |
+| `--step`              | off                               | start in step mode: one event per `space` keypress  |
 | `--url <URL>`         | `http://127.0.0.1:8085/api/v1/tap/stream` | tap endpoint (live mode)                             |
 
 ### Runtime keys
@@ -145,10 +145,10 @@ The pacer is the reader-side throttle.
 |-------------|----------------------------------------------------------------------------|
 | `q` / `Esc` | quit                                                                       |
 | `Ctrl+C`    | quit                                                                       |
-| `space`     | in step mode, advance one event; else, enter step mode                     |
+| `space`     | in step mode, advance one event. Otherwise, enter step mode                     |
 | `s`         | toggle step mode                                                           |
-| `n`         | slower — pace by +100 ms                                                   |
-| `m`         | faster — pace by −100 ms (clamped to 0)                                    |
+| `n`         | slower: pace by +100 ms                                                   |
+| `m`         | faster: pace by −100 ms (clamped to 0)                                    |
 | `f`         | full speed (delay = 0)                                                     |
 
 Pace state is shown in the banner: `full` / `N ms/event` / `STEP (space=next)`.
@@ -177,15 +177,15 @@ and the out-of-order chunk.completed recovery.
 
 ```
 src/
-├── event.rs      — wire types (serde-tagged enum on `kind`, 13 variants)
-├── state.rs      — consumer state machine (apply events → derived view)
-├── demo.rs       — finite chunk42 scenarios (standard, standby, long-name)
-├── showcase.rs   — procedural infinite generator (standard and long-name)
-├── source.rs     — live HTTP reader + demo/showcase thread runners
-├── pacing.rs     — atomic delay + bounded-channel step gate
-├── lib.rs        — shared runner (`run_app`), CLI, terminal guard
+├── event.rs      : wire types (serde-tagged enum on `kind`, 13 variants)
+├── state.rs      : consumer state machine (apply events → derived view)
+├── demo.rs       : finite chunk42 scenarios (standard, standby, long-name)
+├── showcase.rs   : procedural infinite generator (standard and long-name)
+├── source.rs     : live HTTP reader + demo/showcase thread runners
+├── pacing.rs     : atomic delay + bounded-channel step gate
+├── lib.rs        : shared runner (`run_app`), CLI, terminal guard
 └── bin/
-    └── hydroscope.rs — three-pane rendering (source, sink, reconciler)
+    └── hydroscope.rs : three-pane rendering (source, sink, reconciler)
 ```
 
 Layering: reader thread → channel → UI thread owns `State` → the bin
@@ -194,21 +194,21 @@ hook restores the terminal before the message prints.
 
 ## Screenshots
 
-`screenshots/` contains reference PNGs captured via `vhs`:
+`screenshots/` contains baseline PNGs captured via `vhs`:
 
-- `2_hydroscope.png` — chunk42 mid-refresh (window CLOSING)
-- `4_hydroscope_open.png` — chunk42 window OPEN, HW pending
-- `6_hydroscope_showcase.png` — showcase scenario mid-chunk-3
+- `2_hydroscope.png`: chunk42 mid-refresh (window CLOSING)
+- `4_hydroscope_open.png`: chunk42 window OPEN, HW pending
+- `6_hydroscope_showcase.png`: showcase scenario mid-chunk-3
 
 Regenerate via `vhs screenshots/<name>.tape`.
 
 ## Known limitations
 
 - Seq dedup is active but there's no server-side peek-then-commit fix
-  yet — see `CONTROL_PLANE.md § 5.4` delivery-semantics note.
-- Multi-sink fan-out (one CDC → N `sink.event` rows) renders per-row;
-  dedupe / per-sink split is future work.
-- Source-log and sink panels show only wire-derived fields — no
+  yet (see `CONTROL_PLANE.md § 5.4` delivery-semantics note).
+- Multi-sink fan-out (one CDC → N `sink.event` rows) renders per-row, with
+  dedupe / per-sink split as future work.
+- Source-log and sink panels show only wire-derived fields: no
   cross-referencing between source-side `chunk.collision` events and
   sink-side `LOG` origin events. Collisions surface as their own
   `chunk-drop` rows on arrival.

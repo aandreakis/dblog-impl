@@ -3,23 +3,23 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>DBLog &mdash; a reference implementation of watermark-based change-data capture</title>
-<meta name="description" content="A reference implementation of the DBLog watermark-based change-data-capture (CDC) algorithm: lock-free snapshots reconciled with a live change stream, for MySQL and PostgreSQL.">
+<title>DBLog: Watermark-Based Change-Data Capture</title>
+<meta name="description" content="An implementation of the DBLog watermark-based change-data-capture (CDC) algorithm: lock-free snapshots reconciled with a live change stream, for MySQL and PostgreSQL.">
 <link rel="canonical" href="https://aandreakis.github.io/dblog-impl/">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://aandreakis.github.io/dblog-impl/">
-<meta property="og:title" content="DBLog &mdash; a reference implementation of watermark-based change-data capture">
-<meta property="og:description" content="A reference implementation of the DBLog watermark-based change-data-capture (CDC) algorithm: lock-free snapshots reconciled with a live change stream, for MySQL and PostgreSQL.">
+<meta property="og:title" content="DBLog: Watermark-Based Change-Data Capture">
+<meta property="og:description" content="An implementation of the DBLog watermark-based change-data-capture (CDC) algorithm: lock-free snapshots reconciled with a live change stream, for MySQL and PostgreSQL.">
 <meta property="og:image" content="https://aandreakis.github.io/dblog-impl/docs/img/dblog-one-minute.png">
 <meta property="og:image:width" content="3200">
 <meta property="og:image:height" content="1660">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="DBLog &mdash; a reference implementation of watermark-based change-data capture">
-<meta name="twitter:description" content="A reference implementation of the DBLog watermark-based change-data-capture (CDC) algorithm: lock-free snapshots reconciled with a live change stream, for MySQL and PostgreSQL.">
+<meta name="twitter:title" content="DBLog: Watermark-Based Change-Data Capture">
+<meta name="twitter:description" content="An implementation of the DBLog watermark-based change-data-capture (CDC) algorithm: lock-free snapshots reconciled with a live change stream, for MySQL and PostgreSQL.">
 <meta name="twitter:image" content="https://aandreakis.github.io/dblog-impl/docs/img/dblog-one-minute.png">
 <style>
   /*
-   * Calm white — pure white background, deep navy ink, navy accents.
+   * Calm white: pure white background, deep navy ink, navy accents.
    * Width: 832px (52rem at 16px base, 8-pt grid friendly).
    */
   :root {
@@ -28,7 +28,7 @@
     --paper:     #ffffff;
     --line:      #e5e9f0;
     --line-soft: #eef1f6;
-    --ink:       #0a1f3a;       /* deep navy — primary ink */
+    --ink:       #0a1f3a;       /* deep navy: primary ink */
     --ink-mid:   #25334b;
     --ink-dim:   #5b6680;
     --ink-faint: #8d97ad;
@@ -230,7 +230,7 @@
 <header class="hero">
   <h1>DBLog</h1>
   <p class="tag">
-    A reference implementation of the watermark-based change-data
+    An implementation of the watermark-based change-data
     capture algorithm, based on the original DBLog paper and Netflix
     Technology Blog post.
   </p>
@@ -241,8 +241,8 @@
 <h2>The problem</h2>
 
 <p>
-  A downstream system &mdash; a search index, a cache, a data warehouse
-  &mdash; needs to track every change in a database. To
+  A downstream system (a search index, a cache, or a data warehouse)
+  needs to track every change in a database. To
   feed it, you need two streams:
 </p>
 
@@ -269,7 +269,7 @@
 <figure class="media">
   <img src="ops/tap-tui/docs/img/hero.gif" alt="Hydroscope showing DBLog watermark-window reconciliation in action">
   <figcaption>
-    DBLog in motion &mdash; live log events and bounded chunk reads
+    DBLog in motion: live log events and bounded chunk reads
     merging into one ordered output stream, captured by the bundled
     visualizer (Hydroscope). How it works is below.
   </figcaption>
@@ -289,18 +289,18 @@
 </p>
 
 <p class="wm-line">
-  <span class="wm-chip"><span class="glyph">&#9660;</span> LW</span>
-  &nbsp;&mdash; the <em>low watermark</em>, written to the source <b>before</b> reading a chunk of rows.
+  <span class="wm-chip"><span class="glyph">&#9660;</span> LW</span>: the
+  <em>low watermark</em>, written to the source <b>before</b> reading a chunk of rows.
 </p>
 <p class="wm-line">
-  <span class="wm-chip"><span class="glyph">&#9650;</span> HW</span>
-  &nbsp;&mdash; the <em>high watermark</em>, written to the source <b>after</b> reading the chunk.
+  <span class="wm-chip"><span class="glyph">&#9650;</span> HW</span>: the
+  <em>high watermark</em>, written to the source <b>after</b> reading the chunk.
 </p>
 
 <p>
   Between LW and HW, DBLog keeps consuming live log events normally. It
-  also reads a bounded chunk of rows from the source &mdash; say primary
-  keys 1&ndash;100 &mdash; and buffers them. When HW comes back from the
+  also reads a bounded chunk of rows from the source (for example, primary
+  keys 1&ndash;100) and buffers them. When HW comes back from the
   log, DBLog has a clean picture of <b>every change that happened to the
   table while the chunk was being read</b>.
 </p>
@@ -315,7 +315,7 @@
 
 <div class="note">
   <b>Short version:</b> chunk selected rows are provisional. In-window log
-  events are fresher. HW closes the window &mdash; only then are the
+  events are fresher. HW closes the window: only then are the
   surviving chunk rows released and the source checkpoint allowed to
   move forward.
 </div>
@@ -326,9 +326,9 @@
 
 <ol>
   <li><b>Keep streaming.</b> Consume change stream events.</li>
-  <li><b>Write LW.</b> A low-watermark marker is written to the source DB &mdash; the window has begun once DBLog sees it in the change stream.</li>
+  <li><b>Write LW.</b> A low-watermark marker is written to the source DB: the window begins once DBLog sees it in the change stream.</li>
   <li><b>Read a chunk.</b> A bounded primary-key range is read from the source and buffered (not yet emitted).</li>
-  <li><b>Write HW.</b> A high-watermark marker is written to the source DB &mdash; the window closes once DBLog reads it back from the change stream.</li>
+  <li><b>Write HW.</b> A high-watermark marker is written to the source DB: the window closes once DBLog reads it back from the change stream.</li>
   <li><b>Let in-window events win.</b> Any log event between LW and HW touching a buffered PK drops the buffered row.</li>
   <li><b>Emit the survivors.</b> The remaining chunk rows go to the sink, then durable progress advances past HW.</li>
 </ol>
@@ -338,7 +338,7 @@
   <figcaption>
     A worked example: the chunk selects pk=41, pk=42, pk=43. Inside the
     LW&ndash;HW window an <code>UPDATE</code> for pk=42 arrives from the
-    log. The chunk's pk=42 is dropped &mdash; the log copy is fresher.
+    log. The chunk's pk=42 is dropped because the log copy is fresher.
     The output: every in-window log event in order, plus the surviving
     chunk rows (41, 43) emitted on HW.
   </figcaption>
@@ -347,8 +347,8 @@
 <h2>What this repo gives you</h2>
 
 <p>
-  A small Java reference implementation, built from public DBLog
-  material &mdash; the original DBLog paper and the Netflix Technology
+  A small Java implementation, built from public DBLog
+  material: the original DBLog paper and the Netflix Technology
   Blog post. Designed for reading and experimentation, not for production.
 </p>
 
@@ -378,7 +378,7 @@
 </div>
 
 <footer>
-  Independent, unaffiliated reference implementation built from public
+  Independent, unaffiliated implementation built from public
   DBLog material (the original paper and Netflix Technology Blog post).
   <b>Not affiliated with, sponsored by, or endorsed by Netflix, Inc.</b>
   Not Netflix's production DBLog and not intended for production CDC

@@ -267,7 +267,7 @@ def preflight_demo_ports_or_die(services: Sequence[str]) -> None:
         if not port_has_listener(expected_port):
             continue
         # Port has a listener. Held by *our* running compose service? If so,
-        # ``up --no-recreate`` will reuse it — not a conflict.
+        # ``up --no-recreate`` will reuse it, not a conflict.
         running = docker_compose_capture(
             "ps", "--quiet", "--status", "running", normalized
         )
@@ -837,7 +837,7 @@ def extract_request_id(response: str) -> str:
     # ``{"accepted": true, "request": {"requestId": "...", ...}}``, so the id
     # is nested one level below the document root. Fall back to a regex scan
     # in case the server ever surfaces the id at the top level or inside a
-    # different wrapper — matches what the previous ``sed``-based extractor did.
+    # different wrapper, matching what the previous ``sed``-based extractor did.
     try:
         data = json.loads(response)
     except json.JSONDecodeError:

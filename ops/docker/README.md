@@ -3,7 +3,7 @@
 This directory contains the Docker pieces used by the demos, the
 integration-test fixtures, and the packaged example deployment.
 
-These are example assets — they are not a production deployment blueprint.
+These are example assets, not a production deployment blueprint.
 
 ## Database fixtures
 
@@ -35,7 +35,7 @@ docker compose -f ops/docker/compose.yml down -v
 > `--mysql-native-password=ON` and creates the `dblog` user via
 > `IDENTIFIED WITH mysql_native_password`. This keeps the deprecated auth
 > plugin available for compatibility with the binlog tooling used by the
-> integration tests. MySQL 9.x removes the plugin entirely — if you bump the
+> integration tests. MySQL 9.x removes the plugin entirely. If you bump the
 > image, switch `ops/docker/mysql/init/01-create-users.sql` to
 > `caching_sha2_password` and drop the server flag.
 
@@ -160,7 +160,7 @@ rm -f ops/docker/example-state/mysql-to-postgres/runtime-state.mv.db \
 ```
 
 Inside the container DBLog binds `0.0.0.0:8085` so Docker port publishing
-works; the overlay publishes it on `127.0.0.1:8085` on the host.
+works, and the overlay publishes it on `127.0.0.1:8085` on the host.
 
 Inspect the control plane:
 

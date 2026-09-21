@@ -21,7 +21,7 @@ PostgreSQL logical-replication feature.
 
 ## Why `pgoutput` Rather Than `wal2json`?
 
-The DBLog paper describes `wal2json`; this implementation uses `pgoutput`
+The DBLog paper describes `wal2json`. This implementation uses `pgoutput`
 instead. That is a modernization, not a semantic change.
 
 Reasons:
@@ -56,7 +56,7 @@ The shared runtime SQL connection is expected to be:
 
 ## Transport security (TLS)
 
-**DBLog ships no typed TLS support for the PostgreSQL adapter.** Both the regular SQL connection (chunk reads, watermark writes, schema inspection, preflight) and the logical-replication connection (CDC stream via `pgoutput`) are opened with the operator's `dblog.source.postgres.jdbc-url` and `dblog.source.postgres.replication-jdbc-url` verbatim. pgJDBC's TLS parameters work because the driver parses them — DBLog itself does nothing.
+**DBLog ships no typed TLS support for the PostgreSQL adapter.** Both the regular SQL connection (chunk reads, watermark writes, schema inspection, preflight) and the logical-replication connection (CDC stream via `pgoutput`) are opened with the operator's `dblog.source.postgres.jdbc-url` and `dblog.source.postgres.replication-jdbc-url` verbatim. pgJDBC's TLS parameters work because the driver parses them, while DBLog itself does nothing.
 
 If you need TLS, configure it through the JDBC URL:
 
@@ -65,9 +65,9 @@ dblog.source.postgres.jdbc-url=jdbc:postgresql://host:5432/app?sslmode=verify-fu
 dblog.source.postgres.replication-jdbc-url=jdbc:postgresql://host:5432/app?sslmode=verify-full&sslrootcert=/path/to/ca.crt
 ```
 
-Both URLs must carry the TLS parameters independently — DBLog does not propagate them between connections. mTLS (`sslcert`/`sslkey`) works the same way.
+Both URLs must carry the TLS parameters independently, because DBLog does not propagate them between connections. mTLS (`sslcert`/`sslkey`) works the same way.
 
-This is a deliberate scope choice for a reference implementation. The shipped Docker fixtures do not enable TLS and the `compatibilityMatrix` lane runs plaintext.
+This is a deliberate scope choice for this implementation. The shipped Docker fixtures do not enable TLS and the `compatibilityMatrix` lane runs plaintext.
 
 ## Runtime role and ownership
 
@@ -189,10 +189,10 @@ replication stream is opened when a captured primary key contains `TIMETZ`.
 
 PostgreSQL `time(n)` values keep full **microsecond** precision on both capture
 origins. `pgoutput` delivers the value as text, so the streaming path parses the
-fractional second exactly; the chunk read is type-aware for the same reason. An
+fractional second exactly. The chunk read is type-aware for the same reason. An
 untyped JDBC read would yield a `java.sql.Time`, which caps at milliseconds and
 would make a snapshot row disagree with a log event for the same row. (MySQL
-cannot match this — see `docs/adapters/mysql.md`.)
+cannot match this: see `docs/adapters/mysql.md`.)
 
 One edge is inconsistent rather than supported: PostgreSQL accepts
 `time '24:00:00'`, which the chunk path surfaces as `LocalTime.MAX` while the
@@ -201,7 +201,7 @@ One edge is inconsistent rather than supported: PostgreSQL accepts
 ### Known chunk-path value defects
 
 `float4` values are normalized to the shortest decimal that round-trips, so the
-chunk path and the `pgoutput` path agree on the *number* — a driver `Float` is no
+chunk path and the `pgoutput` path agree on the *number*: a driver `Float` is no
 longer widened to a double first, which used to turn `0.1` into
 `0.10000000149011612` on the chunk path only. They do not always agree on the
 `BigDecimal` **scale**, because Java's and PostgreSQL's shortest-decimal formats
@@ -215,7 +215,7 @@ still compare unequal across capture origins. Primary keys are unaffected:
 chunk read produces a JVM-zone-dependent `Instant`, while `pgoutput` produces a
 zone-less `LocalDateTime`. Aligning them means changing the neutral
 representation of the type, which also moves primary-key literal format and
-therefore persisted dump progress — a migration rather than a local fix. Until
+therefore persisted dump progress, requiring a migration rather than a local fix. Until
 then, avoid `timestamp without time zone` in a captured primary key, or run with
 the JVM in UTC so the two forms agree.
 
@@ -292,7 +292,7 @@ also carry type OIDs, but this runtime does not use live relation OIDs as a
 selected-column type-drift detector. Startup/restart schema inspection remains
 the supported point that catches selected type, source-type, and nullability
 drift. Operators should not rely on online PostgreSQL schema evolution as a
-feature; stop DBLog, change the source, verify startup reconciliation, and submit
+feature. Stop DBLog, change the source, verify startup reconciliation, and submit
 a fresh dump when the selected contract changed or correctness is uncertain.
 
 This is a deliberate tradeoff: smaller implementation, no schema-history

@@ -31,7 +31,7 @@ Current shipped local example configs:
 The companion `scripts/demo/*.py` helpers automatically choose a free localhost
 control-plane port when their default port is already occupied. Set
 `DBLOG_CONTROL_PLANE_PORT` to pin a specific port. Those helpers stop their
-isolated Docker database fixture stack on exit; set
+isolated Docker database fixture stack on exit. Set
 `DBLOG_DEMO_KEEP_CONTAINERS=1` to keep it around for inspection.
 
 These host-run configs bind the control plane directly to `127.0.0.1`. The

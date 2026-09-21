@@ -1,4 +1,4 @@
-# Demo fixture — disposable credentials for local/compose use only.
+# Demo fixture: disposable credentials for local/compose use only.
 # Do NOT reuse these values outside this bundled fixture stack.
 
 services:

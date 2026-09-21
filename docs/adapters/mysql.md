@@ -38,14 +38,14 @@ offline `ALTER`.
 
 ### Transport security (TLS)
 
-**DBLog ships no typed TLS support for the MySQL adapter.** The binlog client used for CDC capture is constructed without an SSL mode, which means it negotiates plaintext only. The chunk-read JDBC connection is opened with the operator's `dblog.source.mysql.jdbc-url` verbatim — MySQL Connector/J's TLS parameters (`?sslMode=REQUIRED`, `?trustCertificateKeyStoreUrl=…`, `?clientCertificateKeyStoreUrl=…`) work if you put them there, but DBLog does nothing to coordinate the two connections.
+**DBLog ships no typed TLS support for the MySQL adapter.** The binlog client used for CDC capture is constructed without an SSL mode, which means it negotiates plaintext only. The chunk-read JDBC connection is opened with the operator's `dblog.source.mysql.jdbc-url` verbatim. MySQL Connector/J's TLS parameters (`?sslMode=REQUIRED`, `?trustCertificateKeyStoreUrl=…`, `?clientCertificateKeyStoreUrl=…`) work if you put them there, but DBLog does nothing to coordinate the two connections.
 
 Practical consequences:
 
 - A MySQL server with `require_secure_transport=ON` will **reject the binlog connection** at handshake time. The shipped DBLog cannot consume CDC from such a server. Fork if you need this.
-- The chunk-read JDBC connection can be made TLS-encrypted purely through `jdbc-url` parameters; that is operator-managed and not validated by DBLog.
+- The chunk-read JDBC connection can be made TLS-encrypted purely through `jdbc-url` parameters, which is operator-managed and not validated by DBLog.
 
-This is a deliberate scope choice for a reference implementation. The shipped Docker fixtures do not enable TLS and the `compatibilityMatrix` lane runs plaintext.
+This is a deliberate scope choice for this implementation. The shipped Docker fixtures do not enable TLS and the `compatibilityMatrix` lane runs plaintext.
 
 ### Required user privileges
 
@@ -111,7 +111,7 @@ the session default database and raw SQL text, not a structured target table id.
 As a result, DBLog does not auto-accept online MySQL `ADD COLUMN`, even when the
 new column is outside the selected replicated surface. It can also fail closed
 on row-state- or schema-affecting DDL that targets an uncaptured table in the
-captured database. These false positives are intentional limitations; avoiding
+captured database. These false positives are intentional limitations. Avoiding
 silent divergence on captured-table DDL takes priority over accepting every
 unrelated table change in the same MySQL database.
 
@@ -119,7 +119,7 @@ The lower row decoder still maps binlog tuples by the selected contract when a
 `TABLE_MAP` event exposes column names. If extra columns appear in that metadata
 without a preceding unsupported Query event stopping the stream, DBLog ignores
 those extra columns. That mechanical tolerance is not support for online MySQL
-schema evolution; live captured-database DDL remains a fail-closed boundary.
+schema evolution. Live captured-database DDL remains a fail-closed boundary.
 
 If the live binlog fail-closed path trips on unsupported DDL, selected-column
 `TABLE_MAP` drift, selected-column row tuple drift, or a live primary-key
@@ -129,7 +129,7 @@ full-dump-required signal when the state store is available. Recover by
 verifying or re-bootstrapping the target, clearing or replacing the persisted
 runtime state/checkpoint for that source, then restarting and submitting a
 fresh `ALL_TABLES` dump. The configured `dblog.runtime.state-path` is an H2
-file prefix, not a directory; remove `<state-path>.mv.db` and any
+file prefix, not a directory: remove `<state-path>.mv.db` and any
 `<state-path>.trace.db` / `<state-path>.lock.db` files, or use a new state
 path.
 
@@ -154,7 +154,7 @@ on `mysql-binlog-connector-java`'s decoded Java value. For `DATETIME(6)` row
 events, that path can surface a `java.util.Date`, so DBLog emits a UTC
 `Instant`-shaped value with millisecond precision rather than a zone-less value
 with full microsecond precision. This limitation applies to user-row column
-values only; the educational tap envelope `ts` fields are separate runtime
+values only. The educational tap envelope `ts` fields are separate runtime
 timestamps. If exact MySQL `DATETIME(6)` live-path fidelity matters, avoid
 putting those columns in the selected replicated surface or treat them as a
 known adapter limitation.
@@ -168,12 +168,12 @@ origins. `mysql-binlog-connector-java` builds its `TIME` row values as a
 chunk read does. The chunk read is deliberately held at the same ceiling rather
 than reading full microseconds: making the two origins disagree would hide the
 in-window collision between a snapshot row and a fresher log event for the same
-row. PostgreSQL is not limited this way — see `docs/adapters/postgres.md`.
+row. PostgreSQL is not limited this way (see `docs/adapters/postgres.md`).
 
 Two related edges are unsupported rather than approximated:
 
-- MySQL `TIME` outside `00:00:00..23:59:59` — legal in MySQL, which treats
-  `TIME` as a duration — has no neutral representation, since the neutral type
+- MySQL `TIME` outside `00:00:00..23:59:59` (legal in MySQL, which treats
+  `TIME` as a duration) has no neutral representation, since the neutral type
   is `java.time.LocalTime`. The two paths do not even fail the same way: the
   chunk read raises a driver error, while the binlog path silently wraps modulo
   24 hours, so `25:00:00` arrives as `01:00:00` and `838:59:59` as `22:59:59`.
@@ -187,7 +187,7 @@ Two related edges are unsupported rather than approximated:
 ### Known live-path value defects
 
 These are unfixed divergences between the chunk path and the binlog path. All
-are silent — none fails closed:
+are silent, and none fails closed:
 
 - `ENUM` is decoded as its ordinal and `SET` as its bitmask, so a live event
   carries `3` where a dump carries `shipped`. The label arrays are captured in

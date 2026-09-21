@@ -1,21 +1,21 @@
 # Security
 
-This repository is a reference implementation published under the MIT License. It
+This repository is an implementation published under the MIT License. It
 is intentionally low-maintenance (see [CONTRIBUTING.md](CONTRIBUTING.md)), but
 concrete, reproducible security defects within the documented scope are welcome as
 private reports.
 
 ## Reporting a vulnerability
 
-Please report privately via GitHub Security Advisories — open the repository's
-**Security** tab and click **Report a vulnerability**. Include:
+Please report privately via GitHub Security Advisories by opening the repository's
+**Security** tab and clicking **Report a vulnerability**. Include:
 
 - a minimum reproduction (command, config, repo version, JDK, source database
   family and version)
 - observed impact and attack prerequisites
 - a suggested fix, if you have one
 
-There is no SLA. Response is best-effort; there is no guarantee of fix, backport,
+There is no SLA. Response is best effort, with no guarantee of fix, backport,
 or coordinated disclosure.
 
 ## In scope
@@ -26,12 +26,12 @@ or coordinated disclosure.
 - SQL injection, path traversal, TLS / certificate-validation gaps
 - denial of service against the DBLog process from crafted input (malformed
   source events, malformed control-plane requests, etc.)
-- bypasses of documented fail-closed boundaries — watermark invariants, schema
-  drift policy, metadata-row validation, single-owner claim
+- bypasses of documented fail-closed boundaries (watermark invariants, schema
+  drift policy, metadata-row validation, single-owner claim)
 
 ## Out of scope (documented by design)
 
-The following are documented intentional limits of this reference implementation,
+The following are documented intentional limits of this implementation,
 not vulnerabilities:
 
 - **No control-plane authn/authz.** The HTTP control plane binds to `127.0.0.1`
@@ -39,7 +39,7 @@ not vulnerabilities:
   the operator's responsibility. See
   [docs/OPERATION.md § 5.1.1](docs/OPERATION.md).
 - **Plaintext credentials in configuration.** Source and target database
-  passwords in `application.properties` are plain strings; they will appear in
+  passwords in `application.properties` are plain strings. They will appear in
   heap and thread dumps. See [docs/OPERATION.md § 9.1.2](docs/OPERATION.md).
 - **Disposable demo fixture credentials.** The Docker fixtures under
   `ops/docker/` use `dblog/dblog` and `postgres/postgres` and bind to
