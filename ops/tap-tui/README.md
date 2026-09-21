@@ -196,11 +196,12 @@ hook restores the terminal before the message prints.
 
 `screenshots/` contains baseline PNGs captured via `vhs`:
 
-- `2_hydroscope.png`: chunk42 mid-refresh (window CLOSING)
-- `4_hydroscope_open.png`: chunk42 window OPEN, HW pending
+- `2_hydroscope.png`: chunk42 mid-refresh (HW received, refresh rows reaching the sink)
+- `4_hydroscope_open.png`: chunk42 with the window open (LW received, HW pending)
 - `6_hydroscope_showcase.png`: showcase scenario mid-chunk-3
 
-Regenerate via `vhs screenshots/<name>.tape`.
+Regenerate from this directory, after the release build, via
+`vhs screenshots/<name>.tape`.
 
 ## Known limitations
 

@@ -18,3 +18,4 @@ preview/
 ops/tap-tui/docs/img/*.mp4
 ops/tap-tui/docs/img/*.webm
 ops/tap-tui/docs/img/.*.gif
+ops/tap-tui/screenshots/.*.gif

@@ -1,18 +1,18 @@
-Output "/tmp/dblog-tui-continuation/screenshots/hydroscope.gif"
+Output "screenshots/.hydroscope.gif"
 
-Set FontSize 13
-Set Width 1920
-Set Height 1080
+Set FontSize 18
+Set Width 1400
+Set Height 820
 Set Padding 10
-Set TypingSpeed 0ms
 Set Theme "Blazer"
+Set TypingSpeed 0ms
 
 Hide
-Type "/tmp/dblog-tui-continuation/target/release/hydroscope --demo --slowdown 40"
+Type "./target/release/hydroscope --demo --slowdown 40"
 Enter
 Sleep 1700ms
 Show
-Screenshot "/tmp/dblog-tui-continuation/screenshots/2_hydroscope.png"
+Screenshot "screenshots/2_hydroscope.png"
 Sleep 200ms
 Type "q"
 Sleep 200ms
