@@ -396,7 +396,7 @@ target/release/hydroscope --url http://host:port/api/v1/tap/stream</pre>
 
 <p>
   The screen is split 72% / 28% horizontally. Left column stacks
-  <b>SOURCE LOG</b> (top) and <b>SINK STREAM</b> (bottom). The right column
+  <b>SOURCE EVENTS</b> (top) and <b>SINK STREAM</b> (bottom). The right column
   is the <b>RECONCILER</b> sidebar. Six distinct areas, each shown
   below at its actual rendered size so you can read the content:
 </p>
@@ -404,18 +404,21 @@ target/release/hydroscope --url http://host:port/api/v1/tap/stream</pre>
 <div class="anat-section">
   <h3>Title bar</h3>
   <div class="loc">row 1 · always present</div>
-  <div class="shot"><img src="img/anat_titlebar.png" alt="Title bar: DBLOG · HYDROSCOPE, run id (first 13 chars), source id"></div>
+  <div class="shot"><img src="img/anat_titlebar.png" alt="Title bar: DBLOG · HYDROSCOPE, shortened run id, source id"></div>
   <p>
-    Brand marker on the left, then <code>run &lt;id&gt;</code> (first 13
-    chars of the DBLog run UUID), <code>source_id</code>, and uptime
-    <code>t+HH:MM:SS.mmm</code>. The rightmost cell (clipped in this
-    narrow capture) is the window state label:
+    Brand marker on the left, then <code>run &lt;id&gt;</code> and
+    <code>source &lt;source_id&gt;</code>. A run id longer than 17
+    characters is shortened to its first 8 and last 8 characters, joined
+    by an ellipsis. Until a run id has been received, the run shows as
+    <code>«waiting»</code>.
   </p>
   <p>
-    <span class="chip yellow">OPEN</span> LW received, HW pending ·
-    <span class="chip blue">CLOSING</span> HW received, chunk not yet <code>completed</code> ·
-    <span class="chip cyan">SELECTED</span> chunk selected but LW still pending ·
-    <span class="chip">none</span> no chunk active.
+    The window state is not part of the title bar. It is on the
+    <b>RECONCILER</b> sidebar. There, the Low Watermark and High
+    Watermark markers are hollow triangles (<code>▽</code>,
+    <code>△</code>) while the watermark is still awaited on the change
+    stream. They become filled triangles (<code>▼</code>,
+    <code>▲</code>) once it has been received.
   </p>
 </div>
 
@@ -424,66 +427,70 @@ target/release/hydroscope --url http://host:port/api/v1/tap/stream</pre>
   <div class="loc">row 2 · priority-ordered</div>
   <div class="shot"><img src="img/anat_banner.png" alt="Banner showing ● connected · demo://chunk-42 · request 17 · TABLE orders · ACTIVE · pace full"></div>
   <p>
-    Priority order: <b>standby &gt; error &gt; disconnect &gt;
-    connection state</b>. When healthy, shows <code>●&nbsp;connected</code>,
-    queue fill (<code>queue&nbsp;N/M&nbsp;(P%)</code>), the latest
+    Priority order: <b>standby &gt; error &gt; parse error &gt;
+    disconnect &gt; connection state</b>. When healthy, shows
+    <code>●&nbsp;connected</code> with the stream source, the latest
     request's id + scope + state, and current pace.
   </p>
   <p>
     <span class="chip yellow">⚠ STANDBY</span> and
     <span class="chip red">✗ ERROR</span> /
     <span class="chip red">⚠ DISCONNECTED</span> are the attention
-    states. DISCONNECTED also shows uptime so you know how long we've
-    been retrying.
+    states. STANDBY shows the queue capacity and the
+    <code>queue_full_ms</code> value reported when the standby began.
+    ERROR stays for about 30 seconds of stream time and then gives way
+    to the regular banner. DISCONNECTED shows <code>retrying</code> and
+    the last disconnect reason.
   </p>
 </div>
 
 <div class="anat-section">
-  <h3>Source log</h3>
+  <h3>Source events</h3>
   <div class="loc">top-left pane · 50% of the left column</div>
-  <div class="shot"><img src="img/anat_sourcelog.png" alt="Source log table with seq, LSN, op, table/pk, kind, note columns, showing wm-written, chunk-sel, cdc, and wm-received rows"></div>
+  <div class="shot"><img src="img/anat_sourcelog.png" alt="Source events table with seq, LSN, op, table/pk, kind, note columns, showing wm-written, chunk-sel, cdc, and wm-received rows"></div>
   <p>
-    Every tap event in the order it arrived. Columns:
-    <code>seq</code>, <code>t</code> (relative to first event),
-    <code>LSN</code>, <code>kind</code>, <code>op</code>,
-    <code>table / pk</code>, <code>note</code>.
+    Tap events in the order they arrived. Columns:
+    <code>seq</code>, <code>LSN</code>, <code>op</code>,
+    <code>table / pk</code>, <code>kind</code>, <code>note</code>.
   </p>
   <p>
     Event kinds: <code>cdc</code>, <code>wm-written</code>,
-    <code>wm-received</code>, <code>chunk-sel</code>,
-    <code>chunk-drop</code>, <code>chunk-done</code>. Colour maps to
+    <code>wm-received</code>, <code>chunk-sel</code>. Colour maps to
     <a href="#colors">semantics below</a>.
   </p>
   <p>
     <code>checkpoint.advanced</code> events are producer-side bookkeeping.
     The TUI accepts them on the wire but intentionally drops them, so
-    the source log stays focused on what drives the reconciler.
+    the pane stays focused on what drives the reconciler.
   </p>
   <p>
-    Strictly wire-derived: no cross-referencing between event streams.
-    A collision surfaces as its own <code>chunk-drop</code> row on
-    arrival.
+    A collision does not get a row of its own. The <code>cdc</code> row
+    that caused it turns yellow and carries the note
+    <code>collision in chunk N</code>. The pane does not list
+    <code>chunk.collision</code> and <code>chunk.completed</code> events.
+    The reconciler sidebar reports the number of replaced rows as
+    <code>replaced-by-cdc</code>.
   </p>
 </div>
 
 <div class="anat-section">
   <h3>Sink stream</h3>
   <div class="loc">bottom-left pane · 50% of the left column</div>
-  <div class="shot"><img src="img/anat_sinkstream.png" alt="Sink stream table with seq, t, LSN, op, table, pk, origin, badge columns for LOG and SELECT origins"></div>
+  <div class="shot"><img src="img/anat_sinkstream.png" alt="Sink stream table with seq, LSN, op, table/pk, origin, badge columns for LOG and SELECT origins"></div>
   <p>
     What downstream consumers see after reconciliation. Columns:
-    <code>seq</code>, <code>t</code>, <code>LSN</code>, <code>op</code>,
-    <code>table</code>, <code>pk</code>, <code>origin</code>,
-    <code>badge</code>.
+    <code>seq</code>, <code>LSN</code>, <code>op</code>,
+    <code>table / pk</code>, <code>origin</code>, <code>badge</code>.
   </p>
   <p>
     <span class="chip blue">LOG</span> = CDC passthrough ·
     <span class="chip cyan">SELECT</span> = snapshot refresh row
-    emitted on <code>HW</code>. Badge surfaces the in-window chunk id
-    for LOG rows that landed inside a watermark window, and is empty
-    otherwise (including for SELECT rows, as the origin already says
-    "snapshot refresh", and the active dump id is on the reconciler
-    sidebar).
+    emitted on <code>HW</code>. The badge names the chunk. A LOG row
+    that landed inside a watermark window shows
+    <code>chunk N · IN-WINDOW</code>. A LOG row that replaced a snapshot
+    row of the chunk shows <code>chunk N · LOG WON</code> in yellow. A
+    SELECT row shows <code>chunk N</code>. A LOG row outside any window
+    has an empty badge.
   </p>
 </div>
 
@@ -491,23 +498,24 @@ target/release/hydroscope --url http://host:port/api/v1/tap/stream</pre>
   <h3>Reconciler sidebar</h3>
   <div class="loc">right column · 28% · full height</div>
   <div class="anat-reconciler">
-    <div class="shot"><img src="img/anat_reconciler.png" alt="Reconciler sidebar showing LW token/lsn/latency, in-window cdc collisions + passthrough count, chunk buffer with excluded pks crossed out"></div>
+    <div class="shot"><img src="img/anat_reconciler.png" alt="Reconciler sidebar showing chunk id, table and pk range, Low Watermark lsn and latency, chunk buffer with excluded pks marked, in-window cdc collisions and passthrough count, High Watermark lsn and latency, replaced-by-cdc and emit-ready counts"></div>
     <div>
       <p>
         Live state of the active chunk only. Flows top-to-bottom in
         algorithm time-order:
       </p>
       <ol style="margin:0 0 10px 18px; padding:0;">
-        <li><code>pk&nbsp;[lo&nbsp;…&nbsp;hi]</code>: chunk's pk range</li>
-        <li><code>req</code> / <code>dump</code>: request + dump identity</li>
-        <li><code>▼&nbsp;LW</code>: low-watermark token, LSN, latency</li>
-        <li><code>in-window cdc</code>: collisions listed (up to 3), passthrough count</li>
+        <li><code>chunk</code> / <code>table</code> / <code>pk&nbsp;[lo&nbsp;…&nbsp;hi]</code>: chunk id, table and pk range</li>
+        <li><code>▼&nbsp;Low Watermark</code>: LSN and latency once received (hollow <code>▽</code> while awaited)</li>
         <li><code>chunk buffer</code>: pk range visualisation, excluded pks <span style="text-decoration:line-through;color:var(--yellow)">crossed out</span></li>
-        <li><code>excluded (log won)</code>: up to 6 excluded pks one-per-line</li>
-        <li><code>△&nbsp;HW</code>: high-watermark token, LSN, latency</li>
+        <li><code>in-window cdc</code>: collisions listed (up to 3), passthrough count</li>
+        <li><code>▲&nbsp;High Watermark</code>: LSN and latency once received (hollow <code>△</code> while awaited)</li>
+        <li><code>replaced-by-cdc</code>: number of snapshot rows replaced by log events</li>
         <li><code>emit-ready</code>: refresh row count waiting on HW</li>
-        <li>metadata footer: <code>after</code> / <code>final</code> / <code>fp</code></li>
       </ol>
+      <p>
+        With no active chunk the sidebar shows <code>no chunk active</code>.
+      </p>
       <p>
         Fixed-width sidebar: doesn't collapse or resize when the chunk
         lifecycle advances, so the source/sink panels stay visually
@@ -533,10 +541,10 @@ target/release/hydroscope --url http://host:port/api/v1/tap/stream</pre>
 
 <table>
   <tbody>
-    <tr><td><span class="chip blue">BLUE</span></td>  <td>flowing / complete / healthy: CDC events, connected, LW received, HW on closed chunk</td></tr>
-    <tr><td><span class="chip yellow">YELLOW</span></td><td>anomaly / pending: collision triggers, HW pending, standby, excluded pk</td></tr>
+    <tr><td><span class="chip blue">BLUE</span></td>  <td>flowing / healthy: CDC events, connected, sink <code>origin=LOG</code>, IN-WINDOW badge</td></tr>
+    <tr><td><span class="chip yellow">YELLOW</span></td><td>anomaly / attention: collision rows, LOG WON badge, standby, parse error, excluded pk</td></tr>
     <tr><td><span class="chip cyan">CYAN</span></td>   <td>process state: sink <code>origin=SELECT</code>, request lifecycle</td></tr>
-    <tr><td><span class="chip red">RED</span></td>     <td>hard signal: LW marker, error, disconnected banner</td></tr>
+    <tr><td><span class="chip red">RED</span></td>     <td>hard signal: LW and HW markers, chunk id, error, disconnected banner</td></tr>
     <tr><td><span class="chip">gray / dim</span></td>  <td>chrome and orientation: labels, placeholders, "no data yet"</td></tr>
   </tbody>
 </table>
@@ -604,7 +612,7 @@ target/release/hydroscope --url http://host:port/api/v1/tap/stream</pre>
   Hydroscope is designed around a ~120-column wide terminal. On narrower
   windows, the source-log and sink-stream tables drop rightmost columns
   first (kind, note, badge). The reconciler sidebar holds its content but
-  tokens (UUIDs) and LSNs may clip mid-string.
+  LSNs may clip mid-string.
 </p>
 
 <h3>503 <code>tap_not_enabled</code></h3>

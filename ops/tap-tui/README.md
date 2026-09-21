@@ -12,7 +12,7 @@ Layout (72% / 28% horizontal split):
 
 ```
 ┌─────────────────────────────────┬──────────────┐
-│ SOURCE LOG (tap stream)         │              │
+│ SOURCE EVENTS (tap stream)      │              │
 │                                 │              │
 ├─────────────────────────────────┤  RECONCILER  │
 │ SINK STREAM (post-reconciled)   │              │
@@ -21,8 +21,8 @@ Layout (72% / 28% horizontal split):
 ```
 
 The reconciler is a fixed sidebar (doesn't collapse when chunks
-complete), flowing in algorithm time-order: `pk-range → LW → in-window
-CDC → chunk buffer → HW → emit-ready → metadata`.
+complete), flowing in algorithm time-order: `chunk identity → LW →
+chunk buffer → in-window CDC → HW → replaced-by-cdc → emit-ready`.
 
 Consumes the live tap at `GET /api/v1/tap/stream` or a built-in
 procedural demo (`--scenario`) for offline teaching / verification.
@@ -208,7 +208,7 @@ Regenerate via `vhs screenshots/<name>.tape`.
   yet (see `CONTROL_PLANE.md § 5.4` delivery-semantics note).
 - Multi-sink fan-out (one CDC → N `sink.event` rows) renders per-row, with
   dedupe / per-sink split as future work.
-- Source-log and sink panels show only wire-derived fields: no
-  cross-referencing between source-side `chunk.collision` events and
-  sink-side `LOG` origin events. Collisions surface as their own
-  `chunk-drop` rows on arrival.
+- Collision marking matches rows by LSN. The source pane tints the `cdc`
+  row that caused a collision, and the sink pane marks the matching `LOG`
+  row as `LOG WON`. The index of collision LSNs keeps the most recent
+  2000 entries.
